@@ -1,14 +1,13 @@
 import asyncio
-from pathlib import Path
 
 from langgraph_sdk import get_client
+from zharness.workspace.paths import ensure_thread_workspace
 
 
 async def run_turn(
     client,
     thread_id: str,
     message: str,
-    workspace_path: str,
 ) -> None:
     async for event in client.runs.stream(
         thread_id,
@@ -20,9 +19,6 @@ async def run_turn(
                     "content": message,
                 }
             ]
-        },
-        context={
-            "workspace_path": workspace_path,
         },
         stream_mode="updates",
     ):
@@ -37,17 +33,14 @@ async def main() -> None:
 
     print("thread:", thread_id)
 
-    workspace = Path(".zharness/workspaces") / thread_id
-    workspace.mkdir(parents=True, exist_ok=True)
+    workspace = ensure_thread_workspace(thread_id)
     expected_content = "hello from the runtime-scoped workspace"
     (workspace / "hello.txt").write_text(expected_content, encoding="utf-8")
-    workspace_path = str(workspace.resolve())
 
     await run_turn(
         client,
         thread_id,
         "请使用 list_workspace 工具列出当前工作区文件，并记住文件名。",
-        workspace_path,
     )
 
     first_state = await client.threads.get_state(thread_id)
@@ -67,7 +60,6 @@ async def main() -> None:
         client,
         thread_id,
         "请使用 read_file 工具读取刚才看到的文件，并告诉我文件内容。",
-        workspace_path,
     )
 
     second_state = await client.threads.get_state(thread_id)
