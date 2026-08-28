@@ -12,4 +12,13 @@ def test_create_lead_agent() -> None:
 
     assert agent.name == "lead_agent"
     assert agent.context_schema is None
-    assert "write_file" in agent.nodes["tools"].bound.tools_by_name
+    assert set(agent.nodes["tools"].bound.tools_by_name) == {
+        "add",
+        "list_workspace",
+        "read_file",
+        "write_file",
+        "edit_file",
+        "delete_path",
+        "glob_files",
+        "grep_files",
+    }

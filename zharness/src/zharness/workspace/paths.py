@@ -65,35 +65,3 @@ def ensure_thread_workspace(
         raise WorkspacePathError("Thread workspace is not a directory")
 
     return workspace
-
-
-def resolve_workspace_path(
-    workspace_path: str | Path,
-    relative_path: str,
-) -> Path:
-    """Resolve a relative path while keeping it inside a workspace."""
-
-    try:
-        root = Path(workspace_path).resolve(strict=True)
-    except (OSError, RuntimeError) as exc:
-        raise WorkspacePathError("Workspace does not exist") from exc
-
-    if not root.is_dir():
-        raise WorkspacePathError("Workspace path is not a directory")
-
-    requested = Path(relative_path)
-
-    if requested.is_absolute():
-        raise WorkspacePathError("Absolute paths are not allowed")
-
-    try:
-        target = (root / requested).resolve(strict=False)
-    except (OSError, RuntimeError) as exc:
-        raise WorkspacePathError(f"Invalid path: {relative_path}") from exc
-
-    try:
-        target.relative_to(root)
-    except ValueError as exc:
-        raise WorkspacePathError("Path escapes the workspace") from exc
-
-    return target

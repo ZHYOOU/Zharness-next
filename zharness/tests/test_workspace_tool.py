@@ -3,126 +3,95 @@ from types import SimpleNamespace
 from typing import cast
 
 from langchain.tools import ToolRuntime
-from zharness.tools.workspace import list_workspace, read_file, write_file
-
-
-def test_read_file_only_exposes_path_to_model() -> None:
-    assert set(read_file.args) == {"path"}
-
-
-def test_list_workspace_hides_runtime_from_model_schema() -> None:
-    assert list_workspace.args == {}
-
-
-def test_write_file_only_exposes_path_and_content_to_model() -> None:
-    assert set(write_file.args) == {"path", "content"}
+from zharness.tools.workspace import (
+    delete_path,
+    edit_file,
+    glob_files,
+    grep_files,
+    list_workspace,
+    read_file,
+    write_file,
+)
 
 
 def runtime_for(thread_id: str | None) -> ToolRuntime:
     return cast(
         ToolRuntime,
-        SimpleNamespace(
-            execution_info=SimpleNamespace(thread_id=thread_id),
-        ),
+        SimpleNamespace(execution_info=SimpleNamespace(thread_id=thread_id)),
     )
 
 
-def test_list_workspace_uses_server_thread_id(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
+def test_runtime_is_hidden_from_all_model_schemas() -> None:
+    assert set(list_workspace.args) == {"path"}
+    assert set(read_file.args) == {"path", "offset", "limit"}
+    assert set(write_file.args) == {"path", "content"}
+    assert set(edit_file.args) == {
+        "path",
+        "old_string",
+        "new_string",
+        "replace_all",
+    }
+    assert set(delete_path.args) == {"path"}
+    assert set(glob_files.args) == {"pattern", "path"}
+    assert set(grep_files.args) == {"pattern", "path", "include"}
+
+
+def test_tools_use_server_thread_workspace(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("ZHARNESS_HOME", str(tmp_path))
-    workspace = tmp_path / "workspaces" / "thread-one"
-    workspace.mkdir(parents=True)
-    (workspace / "hello.txt").write_text("hello", encoding="utf-8")
-    runtime = cast(
-        ToolRuntime,
-        SimpleNamespace(
-            execution_info=SimpleNamespace(thread_id="thread-one"),
-            context={"workspace_path": "/etc"},
-        ),
-    )
-
-    assert list_workspace.func(runtime) == ["hello.txt"]
-
-
-def test_read_file_uses_runtime_workspace(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    monkeypatch.setenv("ZHARNESS_HOME", str(tmp_path))
-    workspace = tmp_path / "workspaces" / "thread-one"
-    workspace.mkdir(parents=True)
-    (workspace / "hello.txt").write_text(
-        "hello",
-        encoding="utf-8",
-    )
-
     runtime = runtime_for("thread-one")
 
+    assert write_file.func("/notes/result.txt", "one\ntwo", runtime=runtime) == (
+        "Wrote 7 bytes to /notes/result.txt"
+    )
     assert (
-        read_file.func(
-            "hello.txt",
-            runtime,
-        )
-        == "hello"
+        read_file.func("/notes/result.txt", offset=1, limit=1, runtime=runtime) == "two"
     )
-
-
-def test_read_file_returns_recoverable_error(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    monkeypatch.setenv("ZHARNESS_HOME", str(tmp_path))
-    runtime = runtime_for("thread-one")
-
-    assert read_file.func("../missing.txt", runtime) == (
-        "Error: Path escapes the workspace"
+    assert (
+        edit_file.func("/notes/result.txt", "two", "needle", runtime=runtime)
+        == "Replaced 1 occurrence(s) in /notes/result.txt"
     )
+    assert glob_files.func("*.txt", "/notes", runtime=runtime) == ["/notes/result.txt"]
+    assert grep_files.func("needle", runtime=runtime) == [
+        {"path": "/notes/result.txt", "line": 2, "text": "needle"}
+    ]
 
-
-def test_write_file_uses_runtime_workspace(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    monkeypatch.setenv("ZHARNESS_HOME", str(tmp_path))
-    runtime = runtime_for("thread-one")
-
-    result = write_file.func("notes/result.txt", "done", runtime)
-
-    assert result == "Wrote 4 bytes to notes/result.txt"
-    assert (tmp_path / "workspaces" / "thread-one" / "notes" / "result.txt").read_text(
-        encoding="utf-8"
-    ) == "done"
+    entries = list_workspace.func("/notes", runtime=runtime)
+    assert isinstance(entries, list)
+    assert entries[0]["path"] == "/notes/result.txt"
+    assert delete_path.func("/notes", runtime=runtime) == "Deleted /notes"
+    assert not (tmp_path / "workspaces" / "thread-one" / "notes").exists()
     assert not (tmp_path / "workspaces" / "thread-two").exists()
 
 
-def test_tools_fail_closed_without_execution_info() -> None:
-    runtime = cast(ToolRuntime, SimpleNamespace(execution_info=None))
+def test_tool_errors_are_recoverable(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("ZHARNESS_HOME", str(tmp_path))
+    runtime = runtime_for("thread-one")
 
-    assert list_workspace.func(runtime) == (
-        "Error: Server thread identity is unavailable"
+    assert read_file.func("../missing.txt", runtime=runtime) == (
+        "Error: Path traversal is not allowed"
     )
-    assert read_file.func("hello.txt", runtime) == (
-        "Error: Server thread identity is unavailable"
-    )
-    assert write_file.func("hello.txt", "hello", runtime) == (
-        "Error: Server thread identity is unavailable"
+    assert delete_path.func("/", runtime=runtime) == (
+        "Error: Cannot delete the workspace root"
     )
 
 
-def test_tools_fail_closed_without_thread_id() -> None:
-    runtime = runtime_for(None)
+def test_tools_fail_closed_without_server_thread_identity() -> None:
+    missing_execution = cast(ToolRuntime, SimpleNamespace(execution_info=None))
+    missing_thread = runtime_for(None)
 
-    assert list_workspace.func(runtime) == (
-        "Error: Server thread identity is unavailable"
-    )
+    for runtime in [missing_execution, missing_thread]:
+        assert list_workspace.func(runtime=runtime) == (
+            "Error: Server thread identity is unavailable"
+        )
+        assert read_file.func("hello.txt", runtime=runtime) == (
+            "Error: Server thread identity is unavailable"
+        )
+        assert write_file.func("hello.txt", "hello", runtime=runtime) == (
+            "Error: Server thread identity is unavailable"
+        )
 
 
-def test_client_context_cannot_change_workspace(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
+def test_client_context_cannot_change_workspace(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("ZHARNESS_HOME", str(tmp_path / "server-home"))
     client_workspace = tmp_path / "client-workspace"
     client_workspace.mkdir()
@@ -135,7 +104,7 @@ def test_client_context_cannot_change_workspace(
         ),
     )
 
-    assert list_workspace.func(runtime) == []
-    assert read_file.func("secret.txt", runtime) == (
+    assert list_workspace.func(runtime=runtime) == []
+    assert read_file.func("secret.txt", runtime=runtime) == (
         "Error: File not found: secret.txt"
     )
