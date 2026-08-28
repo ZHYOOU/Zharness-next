@@ -1,8 +1,19 @@
-from zharness.agent import build_agent
+import os
+
+from dotenv import load_dotenv
+
+from zharness.agents.lead import create_lead_agent
+from zharness.models.factory import create_chat_model
 
 
 def main() -> None:
-    agent = build_agent()
+    load_dotenv()
+
+    model = create_chat_model(
+        os.environ["ZHARNESS_MODEL"],
+    )
+
+    agent = create_lead_agent(model)
 
     result = agent.invoke(
         {
@@ -15,8 +26,7 @@ def main() -> None:
         }
     )
 
-    final_message = result["messages"][-1]
-    print(final_message.content)
+    print(result["messages"][-1].content)
 
 
 if __name__ == "__main__":
