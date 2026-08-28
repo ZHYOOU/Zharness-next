@@ -39,7 +39,8 @@ async def main() -> None:
 
     workspace = Path(".zharness/workspaces") / thread_id
     workspace.mkdir(parents=True, exist_ok=True)
-    (workspace / "hello.txt").write_text("hello", encoding="utf-8")
+    expected_content = "hello from the runtime-scoped workspace"
+    (workspace / "hello.txt").write_text(expected_content, encoding="utf-8")
     workspace_path = str(workspace.resolve())
 
     await run_turn(
@@ -65,15 +66,24 @@ async def main() -> None:
     await run_turn(
         client,
         thread_id,
-        "刚才工作区中看到的文件名是什么？",
+        "请使用 read_file 工具读取刚才看到的文件，并告诉我文件内容。",
         workspace_path,
     )
 
     second_state = await client.threads.get_state(thread_id)
-    second_count = len(second_state["values"]["messages"])
+    second_messages = second_state["values"]["messages"]
+    second_count = len(second_messages)
+
+    read_results = [
+        message
+        for message in second_messages
+        if message.get("type") == "tool" and message.get("name") == "read_file"
+    ]
 
     assert second_count > first_count
-    print("runtime workspace context: ok")
+    assert read_results
+    assert expected_content in str(read_results[-1]["content"])
+    print("runtime workspace read: ok")
 
 
 if __name__ == "__main__":
