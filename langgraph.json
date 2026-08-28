@@ -1,0 +1,9 @@
+{
+  "dependencies": [
+    "./zharness"
+  ],
+  "graphs": {
+    "lead_agent": "./zharness/src/zharness/graph.py:graph"
+  },
+  "env": "./zharness/.env"
+}
