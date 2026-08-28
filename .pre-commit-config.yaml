@@ -3,13 +3,13 @@ repos:
     hooks:
       - id: ruff-format
         name: Ruff format check
-        entry: uv run --package zharness ruff format --check zharness
+        entry: uv run --package zharness ruff format --check .
         language: system
         pass_filenames: false
 
       - id: ruff-check
         name: Ruff lint check
-        entry: uv run --package zharness ruff check zharness
+        entry: uv run --package zharness ruff check .
         language: system
         pass_filenames: false
 
