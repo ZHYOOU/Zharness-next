@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from typing import cast
 
 from langchain.tools import ToolRuntime
-from zharness.tools.workspace import list_workspace, read_file
+from zharness.tools.workspace import list_workspace, read_file, write_file
 
 
 def test_read_file_only_exposes_path_to_model() -> None:
@@ -12,6 +12,10 @@ def test_read_file_only_exposes_path_to_model() -> None:
 
 def test_list_workspace_hides_runtime_from_model_schema() -> None:
     assert list_workspace.args == {}
+
+
+def test_write_file_only_exposes_path_and_content_to_model() -> None:
+    assert set(write_file.args) == {"path", "content"}
 
 
 def runtime_for(thread_id: str | None) -> ToolRuntime:
@@ -77,6 +81,22 @@ def test_read_file_returns_recoverable_error(
     )
 
 
+def test_write_file_uses_runtime_workspace(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("ZHARNESS_HOME", str(tmp_path))
+    runtime = runtime_for("thread-one")
+
+    result = write_file.func("notes/result.txt", "done", runtime)
+
+    assert result == "Wrote 4 bytes to notes/result.txt"
+    assert (tmp_path / "workspaces" / "thread-one" / "notes" / "result.txt").read_text(
+        encoding="utf-8"
+    ) == "done"
+    assert not (tmp_path / "workspaces" / "thread-two").exists()
+
+
 def test_tools_fail_closed_without_execution_info() -> None:
     runtime = cast(ToolRuntime, SimpleNamespace(execution_info=None))
 
@@ -84,6 +104,9 @@ def test_tools_fail_closed_without_execution_info() -> None:
         "Error: Server thread identity is unavailable"
     )
     assert read_file.func("hello.txt", runtime) == (
+        "Error: Server thread identity is unavailable"
+    )
+    assert write_file.func("hello.txt", "hello", runtime) == (
         "Error: Server thread identity is unavailable"
     )
 

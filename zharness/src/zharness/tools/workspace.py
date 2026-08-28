@@ -3,6 +3,7 @@ from langchain.tools import ToolRuntime, tool
 from zharness.workspace.listing import list_workspace_entries
 from zharness.workspace.paths import WorkspacePathError, ensure_thread_workspace
 from zharness.workspace.reader import WorkspaceReadError, read_workspace_file
+from zharness.workspace.writer import WorkspaceWriteError, write_workspace_file
 
 
 def _runtime_workspace(runtime: ToolRuntime) -> str:
@@ -39,4 +40,22 @@ def read_file(
             path,
         )
     except (WorkspacePathError, WorkspaceReadError) as exc:
+        return f"Error: {exc}"
+
+
+@tool
+def write_file(
+    path: str,
+    content: str,
+    runtime: ToolRuntime,
+) -> str:
+    """Create or overwrite a UTF-8 text file in the current workspace."""
+
+    try:
+        return write_workspace_file(
+            _runtime_workspace(runtime),
+            path,
+            content,
+        )
+    except (WorkspacePathError, WorkspaceWriteError) as exc:
         return f"Error: {exc}"

@@ -77,6 +77,29 @@ async def main() -> None:
     assert expected_content in str(read_results[-1]["content"])
     print("runtime workspace read: ok")
 
+    written_content = "smoke write success"
+    await run_turn(
+        client,
+        thread_id,
+        (
+            "请使用 write_file 工具创建 result.txt，"
+            f"文件内容必须完全等于：{written_content}"
+        ),
+    )
+
+    third_state = await client.threads.get_state(thread_id)
+    third_messages = third_state["values"]["messages"]
+    write_results = [
+        message
+        for message in third_messages
+        if message.get("type") == "tool" and message.get("name") == "write_file"
+    ]
+
+    assert len(third_messages) > second_count
+    assert write_results
+    assert (workspace / "result.txt").read_text(encoding="utf-8") == written_content
+    print("runtime workspace write: ok")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

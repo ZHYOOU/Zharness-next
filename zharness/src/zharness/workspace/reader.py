@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from zharness.workspace.paths import WorkspacePathError, resolve_workspace_path
+
 MAX_READ_BYTES = 256 * 1024
 
 
@@ -8,31 +10,13 @@ class WorkspaceReadError(ValueError):
 
 
 def _resolve_workspace_file(
-    workspace_path: str,
+    workspace_path: str | Path,
     relative_path: str,
 ) -> Path:
     try:
-        root = Path(workspace_path).resolve(strict=True)
-    except (OSError, RuntimeError) as exc:
-        raise WorkspaceReadError("Workspace does not exist") from exc
-
-    if not root.is_dir():
-        raise WorkspaceReadError("Workspace path is not a directory")
-
-    requested = Path(relative_path)
-
-    if requested.is_absolute():
-        raise WorkspaceReadError("Absolute paths are not allowed")
-
-    try:
-        target = (root / requested).resolve(strict=False)
-    except (OSError, RuntimeError) as exc:
-        raise WorkspaceReadError(f"Invalid path: {relative_path}") from exc
-
-    try:
-        target.relative_to(root)
-    except ValueError as exc:
-        raise WorkspaceReadError("Path escapes the workspace") from exc
+        target = resolve_workspace_path(workspace_path, relative_path)
+    except WorkspacePathError as exc:
+        raise WorkspaceReadError(str(exc)) from exc
 
     if not target.exists():
         raise WorkspaceReadError(f"File not found: {relative_path}")
@@ -44,7 +28,7 @@ def _resolve_workspace_file(
 
 
 def read_workspace_file(
-    workspace_path: str,
+    workspace_path: str | Path,
     relative_path: str,
     *,
     max_bytes: int = MAX_READ_BYTES,
