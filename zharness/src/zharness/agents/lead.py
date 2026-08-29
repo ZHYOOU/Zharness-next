@@ -1,5 +1,5 @@
 from langchain.agents import create_agent
-from langchain.agents.middleware import TodoListMiddleware
+from langchain.agents.middleware import SummarizationMiddleware, TodoListMiddleware
 from langchain_core.language_models import BaseChatModel
 
 from zharness.tools.workspace import (
@@ -33,6 +33,13 @@ def create_lead_agent(model: BaseChatModel):
             glob_files,
             grep_files,
         ],
-        middleware=[TodoListMiddleware()],
+        middleware=[
+            TodoListMiddleware(),
+            SummarizationMiddleware(
+                model=model,
+                trigger=("tokens", 4000),
+                keep=("messages", 8),
+            ),
+        ],
         system_prompt=SYSTEM_PROMPT,
     )

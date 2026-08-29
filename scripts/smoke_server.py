@@ -100,6 +100,38 @@ async def main() -> None:
     assert (workspace / "result.txt").read_text(encoding="utf-8") == written_content
     print("runtime workspace write: ok")
 
+    await run_turn(
+        client,
+        thread_id,
+        (
+            "这是一个多步骤任务。请先使用 write_todos 创建计划，然后依次完成："
+            "1. 使用 read_file 读取 result.txt；"
+            "2. 使用 edit_file 将 smoke 替换为 verified；"
+            "每完成一步立即更新 todo 状态，最后确保所有 todo 都是 completed。"
+        ),
+    )
+
+    todo_state = await client.threads.get_state(thread_id)
+    todos = todo_state["values"].get("todos", [])
+    todo_messages = todo_state["values"]["messages"]
+    todo_results = [
+        message
+        for message in todo_messages
+        if message.get("type") == "tool" and message.get("name") == "write_todos"
+    ]
+
+    assert todo_results
+    assert todos
+    assert all(todo["status"] == "completed" for todo in todos)
+    assert (workspace / "result.txt").read_text(encoding="utf-8") == (
+        "verified write success"
+    )
+
+    isolated_thread = await client.threads.create()
+    isolated_state = await client.threads.get_state(isolated_thread["thread_id"])
+    assert not isolated_state["values"].get("todos")
+    print("runtime todo planning: ok")
+
 
 if __name__ == "__main__":
     asyncio.run(main())
