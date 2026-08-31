@@ -5,5 +5,8 @@
   "graphs": {
     "lead_agent": "./zharness/src/zharness/graph.py:graph"
   },
+  "http": {
+    "app": "./zharness/src/zharness/http.py:app"
+  },
   "env": "./zharness/.env"
 }

@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from pathlib import PurePosixPath
 from typing import Any, Final, Literal, overload
 
-from wcmatch.glob import wcglob
+from wcmatch import glob as wcglob
 
 from zharness.sandbox.protocol import (
     FileData,

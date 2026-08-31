@@ -2,6 +2,7 @@ from langchain.agents import create_agent
 from langchain.agents.middleware import SummarizationMiddleware, TodoListMiddleware
 from langchain_core.language_models import BaseChatModel
 
+from zharness.tools.execute import execute_command
 from zharness.tools.workspace import (
     delete_path,
     edit_file,
@@ -15,7 +16,8 @@ from zharness.tools.workspace import (
 SYSTEM_PROMPT = """
 You are a concise assistant.
 Use workspace tools to inspect and modify files. Workspace paths are virtual and
-rooted at /; never assume they are host filesystem paths.
+rooted at /; never assume they are host filesystem paths. Shell commands execute
+inside an isolated container whose /workspace directory is this virtual root.
 """.strip()
 
 
@@ -32,6 +34,7 @@ def create_lead_agent(model: BaseChatModel):
             delete_path,
             glob_files,
             grep_files,
+            execute_command,
         ],
         middleware=[
             TodoListMiddleware(),

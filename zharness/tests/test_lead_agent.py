@@ -22,4 +22,5 @@ def test_create_lead_agent() -> None:
         "delete_path",
         "glob_files",
         "grep_files",
+        "execute_command",
     }
