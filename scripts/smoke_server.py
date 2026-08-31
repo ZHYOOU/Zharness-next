@@ -132,6 +132,36 @@ async def main() -> None:
     assert not isolated_state["values"].get("todos")
     print("runtime todo planning: ok")
 
+    docker_thread = await client.threads.create()
+    docker_thread_id = docker_thread["thread_id"]
+    docker_workspace = ensure_thread_workspace(docker_thread_id)
+    docker_content = "docker sandbox execution success"
+
+    await run_turn(
+        client,
+        docker_thread_id,
+        (
+            "请务必使用 execute_command 工具执行下面的命令，不要使用其他工具："
+            f"printf '%s' '{docker_content}' > docker-result.txt "
+            "&& cat docker-result.txt"
+        ),
+    )
+
+    docker_state = await client.threads.get_state(docker_thread_id)
+    execute_results = [
+        message
+        for message in docker_state["values"]["messages"]
+        if message.get("type") == "tool" and message.get("name") == "execute_command"
+    ]
+
+    assert execute_results
+    assert docker_content in str(execute_results[-1]["content"])
+    assert "[exit_code=0]" in str(execute_results[-1]["content"])
+    assert (docker_workspace / "docker-result.txt").read_text(
+        encoding="utf-8"
+    ) == docker_content
+    print("docker sandbox execution and workspace mount: ok")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

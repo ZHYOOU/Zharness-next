@@ -122,8 +122,8 @@ Keep the server running and execute this command in another terminal:
 uv run python scripts/smoke_server.py
 ```
 
-The script verifies workspace reads, file writes and edits, and Todo-based task
-planning.
+The script verifies workspace reads, file writes and edits, Todo-based task
+planning, Docker sandbox command execution, and the workspace mount.
 
 ## Development and Testing
 

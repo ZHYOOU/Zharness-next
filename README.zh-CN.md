@@ -111,7 +111,8 @@ LangGraph SDK 创建 thread 并运行 `lead_agent`。
 uv run python scripts/smoke_server.py
 ```
 
-脚本会验证线程工作区读取、文件写入、文件编辑以及 Todo 任务规划。
+脚本会验证线程工作区读取、文件写入、文件编辑、Todo 任务规划、Docker 沙箱命令执行
+以及工作区挂载。
 
 ## 开发与测试
 
