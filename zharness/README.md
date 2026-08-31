@@ -1,37 +1,160 @@
 # ZHarness
 
-## Docker sandbox
+English | [简体中文](README.zh-CN.md)
 
-The lead agent executes shell commands in one Docker container per LangGraph
-thread. The server-owned thread workspace is mounted read-write at `/workspace`;
-the container otherwise has a read-only root filesystem, no network, no Linux
-capabilities, and bounded CPU, memory, and process counts.
+`zharness` is the core Python package of ZHarness Next. It creates the Lead
+Agent, exposes workspace tools, and manages thread-scoped Docker sandboxes for
+command execution.
 
-Build the sandbox image before starting the server:
+## Package Layout
+
+```text
+src/zharness/
+├── agents/
+│   └── lead.py              # Lead Agent, tools, and middleware
+├── models/
+│   └── factory.py           # Chat model factory
+├── sandbox/
+│   ├── docker.py            # Docker sandbox implementation
+│   ├── manager.py           # Thread-to-container lifecycle mapping
+│   ├── protocol.py          # Execution and file-transfer result types
+│   └── sandbox.py           # Sandbox abstraction
+├── tools/
+│   ├── execute.py           # Agent command-execution tool
+│   └── workspace.py         # Agent filesystem tools
+├── workspace/
+│   ├── filesystem.py        # Constrained virtual filesystem
+│   └── paths.py             # Thread workspace path resolution
+├── graph.py                 # LangGraph graph entry point
+└── http.py                  # Cleanup middleware and server lifespan
+```
+
+## Lead Agent
+
+`create_lead_agent()` uses LangChain's `create_agent` to create an agent named
+`lead_agent`. The following tools are registered:
+
+| Tool | Purpose |
+| --- | --- |
+| `list_workspace` | List direct children and metadata for a directory |
+| `read_file` | Read a UTF-8 text file with line-based pagination |
+| `write_file` | Atomically create or overwrite a text file |
+| `edit_file` | Replace one exact text occurrence or all occurrences |
+| `delete_path` | Delete a file or directory tree |
+| `glob_files` | Find paths with a glob pattern |
+| `grep_files` | Search workspace text files for a literal string |
+| `execute_command` | Run a shell command in the current thread's Docker sandbox |
+
+The agent also enables:
+
+- `TodoListMiddleware` for tracking multi-step tasks.
+- `SummarizationMiddleware`, which summarizes the context at 4,000 tokens while
+  retaining the eight most recent messages.
+
+## Model Configuration
+
+`graph.py` reads the model name from `ZHARNESS_MODEL`. The current model factory
+uses `ChatDeepSeek` from `langchain-deepseek`, with a temperature of `0`, a
+60-second request timeout, and up to three retries.
+
+Minimum configuration:
+
+```dotenv
+ZHARNESS_MODEL=deepseek-chat
+DEEPSEEK_API_KEY=your-api-key
+```
+
+## Thread Workspaces
+
+Each LangGraph thread maps to a server-owned directory:
+
+```text
+${ZHARNESS_HOME}/workspaces/<thread_id>/
+```
+
+If `ZHARNESS_HOME` is unset, the default is `.zharness` under the current
+working directory. Thread IDs may contain letters, digits, underscores, and
+hyphens, with a maximum length of 128 characters.
+
+Paths exposed to the agent are virtual paths beginning at `/`. For example,
+`/src/main.py` refers to `src/main.py` inside the current thread's workspace.
+The filesystem rejects:
+
+- `..` path traversal and `~` expansion;
+- symlinks that escape the workspace;
+- attempts to overwrite symlinks or operate on non-regular files;
+- reads or writes above the default 256 KiB limit.
+
+Glob and Grep return at most 100 results by default. Writes use a temporary file
+followed by `os.replace` to avoid leaving a partially written destination.
+
+## Docker Sandbox
+
+The Lead Agent creates or reuses one Docker container per LangGraph thread. The
+thread workspace is mounted read-write at `/workspace`; the rest of the
+container is constrained as follows:
+
+- read-only root filesystem;
+- no network access;
+- all Linux capabilities dropped;
+- `no-new-privileges` enabled;
+- a `tmpfs` at `/tmp` with `nosuid`, `nodev`, and `noexec`;
+- default limits of 1 CPU, 512 MiB of memory, and 128 processes.
+
+Build the image from the repository root:
 
 ```bash
 docker build -f docker/sandbox.Dockerfile -t zharness-sandbox:latest .
 ```
 
-The server process needs access to Docker Engine. Prefer rootless Docker and do
-not mount the Docker socket inside sandbox containers.
+The sandbox image includes Python, Git, GNU Coreutils, Findutils, Grep, and
+Ripgrep. Because the container has no network, it cannot install dependencies
+from the internet while a task is running.
 
-Configuration:
+Sandbox environment variables:
 
-- `ZHARNESS_SANDBOX_IMAGE`: image name, default `zharness-sandbox:latest`.
-- `ZHARNESS_SANDBOX_MEMORY`: memory limit, default `512m`.
-- `ZHARNESS_SANDBOX_USER`: optional container UID/GID such as `1000:1000`;
-  defaults to the server process UID/GID on POSIX hosts.
-- `ZHARNESS_HOME`: host directory containing per-thread workspaces.
+| Variable | Default | Description |
+| --- | --- | --- |
+| `ZHARNESS_SANDBOX_IMAGE` | `zharness-sandbox:latest` | Docker image name |
+| `ZHARNESS_SANDBOX_MEMORY` | `512m` | Container memory limit |
+| `ZHARNESS_SANDBOX_USER` | Server process UID/GID | Container user, for example `1000:1000` |
+| `ZHARNESS_HOME` | `./.zharness` | Parent directory for thread workspaces |
 
-Containers are named from a hash of the server-validated thread ID and carry
-labels binding them to that thread. Existing containers are reused only when
-their labels and `/workspace` mount match the expected thread workspace.
-Call `DockerSandboxManager.remove_for_thread(thread_id)` when deleting a thread;
-an external TTL janitor can use the same method for abandoned threads.
+Commands are limited to 128 KiB of text and a timeout between 1 and 300 seconds.
+Retained output is limited to 1 MiB by default. Sandbox file uploads and
+downloads have a default per-file limit of 16 MiB.
 
-During a graceful server shutdown (including a single `Ctrl+C`), the custom
-Starlette lifespan stops every running container labelled
-`zharness.sandbox=true`. Containers are retained and are started automatically
-if their thread executes again after the server restarts. Forced termination
-such as `kill -9` cannot run lifespan cleanup.
+The server process requires access to Docker Engine. Rootless Docker is
+recommended, and the Docker socket must not be mounted inside sandbox
+containers.
+
+## Lifecycle
+
+- Container names are derived from SHA-256 hashes of thread IDs.
+- Before reuse, a container's thread label, workspace mount, and security
+  options are validated.
+- After a LangGraph thread is successfully deleted, the custom HTTP middleware
+  removes its container.
+- During graceful shutdown, the server stops all running containers labeled
+  `zharness.sandbox=true` but retains them for reuse after a restart.
+- Forced termination such as `kill -9` cannot run shutdown cleanup. An external
+  TTL job can remove abandoned containers with
+  `DockerSandboxManager.remove_for_thread()`.
+
+## Testing
+
+Run from the repository root:
+
+```bash
+uv run pytest zharness/tests
+```
+
+Docker integration tests are skipped by default. Enable them explicitly with:
+
+```bash
+ZHARNESS_RUN_DOCKER_TESTS=1 uv run pytest zharness/tests/test_docker_integration.py
+```
+
+The test suite covers agent tool registration, middleware, workspace path
+isolation, filesystem operations, Docker sandbox behavior, command execution,
+and HTTP lifecycle cleanup.
