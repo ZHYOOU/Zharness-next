@@ -6,6 +6,9 @@ dependencies = [
     "wcmatch>=11.0.1",
 ]
 
+[tool.ruff]
+extend-exclude = ["skills"]
+
 [tool.uv.workspace]
 members = [
     "zharness",

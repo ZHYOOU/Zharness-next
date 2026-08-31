@@ -34,9 +34,9 @@ execution.
 - File tools and `execute_command` share the same Docker sandbox, so they
   always see the same files. Use this to verify command results and file edits
   against each other.
-- The sandbox has a read-only root filesystem, no network access, and a
-  `tmpfs` at `/tmp`. Only the mounted `/workspace` directory persists across
-  calls. Never store important state outside the workspace.
+- The sandbox has a read-only root filesystem, network access through the
+  host, and a `tmpfs` at `/tmp`. Only the mounted `/workspace` directory
+  persists across calls. Never store important state outside the workspace.
 - Each LangGraph thread owns its own workspace and sandbox. Data you create is
   scoped to that thread and invisible to other threads.
 </workspace_model>
@@ -61,7 +61,7 @@ execution.
 - `execute_command` pauses the run for explicit user approval before the command
   is executed. Before requesting one, state clearly what the command will do
   and why. Commands run at most 300 seconds, retain at most 1 MiB of output,
-  and cannot reach the network; keep them focused and self-contained.
+  and keep them focused and self-contained.
 - Be careful with `delete_path`: confirm intent before removing user files or
   directories.
 - Make multiple independent tool calls in parallel when possible for better

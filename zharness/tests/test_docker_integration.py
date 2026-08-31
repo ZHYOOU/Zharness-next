@@ -72,7 +72,7 @@ def test_real_docker_sandbox(tmp_path: Path, monkeypatch) -> None:
         container.reload()
         host_config = container.attrs["HostConfig"]
         assert host_config["ReadonlyRootfs"] is True
-        assert host_config["NetworkMode"] == "none"
+        assert host_config["NetworkMode"] == "bridge"
         assert set(host_config["CapDrop"]) == {"ALL"}
         assert any(
             "no-new-privileges" in option for option in host_config["SecurityOpt"]

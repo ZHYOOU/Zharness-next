@@ -111,7 +111,7 @@ class DockerSandboxManager:
             "working_dir": "/workspace",
             "environment": {"HOME": "/tmp"},
             "volumes": {workspace: {"bind": "/workspace", "mode": "rw"}},
-            "network_mode": "none",
+            "network_mode": "bridge",
             "read_only": True,
             "tmpfs": {"/tmp": "rw,nosuid,nodev,noexec,size=64m"},
             "cap_drop": ["ALL"],
@@ -214,7 +214,7 @@ class DockerSandboxManager:
         security_options = host_config.get("SecurityOpt", []) or []
         hardened = (
             host_config.get("ReadonlyRootfs") is True
-            and host_config.get("NetworkMode") == "none"
+            and host_config.get("NetworkMode") == "bridge"
             and set(host_config.get("CapDrop", []) or []) == {"ALL"}
             and any("no-new-privileges" in option for option in security_options)
         )

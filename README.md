@@ -17,8 +17,8 @@ future gateway layer.
 - Workspace and execution-container isolation by LangGraph `thread_id`.
 - Tools for directory listing, file reading and writing, exact edits, deletion,
   glob matching, and text search.
-- Shell execution in resource-constrained Docker containers with no network and
-  a read-only root filesystem.
+- Shell execution in resource-constrained Docker containers with host-network
+  access and a read-only root filesystem.
 - Todo-based planning for multi-step tasks and automatic summarization of long
   conversations.
 - Container cleanup when a thread is deleted, and graceful sandbox shutdown
@@ -173,6 +173,7 @@ ZHARNESS_RUN_DOCKER_TESTS=1 uv run pytest zharness/tests/test_docker_integration
   shell commands. Sandbox transfers have a default 16 MiB per-file limit.
 - Shell commands may run for at most 300 seconds, with retained output limited
   to 1 MiB by default.
-- Docker sandboxes have no network access and cannot download dependencies at
-  runtime.
+- Docker sandboxes have network access through the host bridge, but the root
+  filesystem is read-only, so runtime dependencies must be installed into
+  `/workspace` or baked into the sandbox image.
 - `gateway` does not yet implement authentication, forwarding, or business APIs.

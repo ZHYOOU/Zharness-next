@@ -188,7 +188,7 @@ def test_manager_creates_hardened_thread_container(tmp_path: Path, monkeypatch) 
     assert options is not None
     workspace = str(tmp_path / "workspaces" / "thread-one")
     assert options["volumes"] == {workspace: {"bind": "/workspace", "mode": "rw"}}
-    assert options["network_mode"] == "none"
+    assert options["network_mode"] == "bridge"
     assert options["read_only"] is True
     assert options["cap_drop"] == ["ALL"]
     assert options["security_opt"] == ["no-new-privileges"]

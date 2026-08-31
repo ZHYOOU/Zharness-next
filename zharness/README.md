@@ -95,7 +95,7 @@ the first file or command tool runs. The thread workspace is mounted read-write
 at `/workspace`; the rest of the container is constrained as follows:
 
 - read-only root filesystem;
-- no network access;
+- host-network access;
 - all Linux capabilities dropped;
 - `no-new-privileges` enabled;
 - a `tmpfs` at `/tmp` with `nosuid`, `nodev`, and `noexec`;
@@ -107,9 +107,11 @@ Build the image from the repository root:
 docker build -f docker/sandbox.Dockerfile -t zharness-sandbox:latest .
 ```
 
-The sandbox image includes Python, Git, GNU Coreutils, Findutils, Grep, and
-Ripgrep. Because the container has no network, it cannot install dependencies
-from the internet while a task is running.
+The sandbox image includes Python, uv, Git, GNU Coreutils, Findutils, Grep,
+Ripgrep, curl, wget, and C build tools. The container has host-network access,
+so dependencies can be installed at runtime, but the root filesystem is
+read-only, so dependencies must be installed into `/workspace` to survive
+container recreation.
 
 Sandbox environment variables:
 

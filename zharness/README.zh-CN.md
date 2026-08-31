@@ -90,7 +90,7 @@ Docker 容器。thread 工作区以读写方式挂载到容器内的 `/workspace
 以下限制：
 
 - 根文件系统只读；
-- 禁用网络；
+- 可联网访问宿主机网络；
 - 丢弃全部 Linux capabilities；
 - 启用 `no-new-privileges`；
 - `/tmp` 使用带 `nosuid`、`nodev` 和 `noexec` 的 tmpfs；
@@ -102,8 +102,9 @@ Docker 容器。thread 工作区以读写方式挂载到容器内的 `/workspace
 docker build -f docker/sandbox.Dockerfile -t zharness-sandbox:latest .
 ```
 
-沙箱镜像包含 Python、Git、GNU Coreutils、Findutils、Grep 和 Ripgrep。由于容器无网络，
-任务运行期间不能从互联网安装依赖。
+沙箱镜像包含 Python、uv、Git、GNU Coreutils、Findutils、Grep、Ripgrep、curl、
+wget 和 C 编译工具链。容器可联网，可在运行时安装依赖，但根文件系统只读，
+依赖需安装到 `/workspace` 才能在容器重建后保留。
 
 沙箱相关环境变量：
 
