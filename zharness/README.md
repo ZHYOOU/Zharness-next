@@ -90,9 +90,9 @@ followed by `os.replace` to avoid leaving a partially written destination.
 
 ## Docker Sandbox
 
-The Lead Agent creates or reuses one Docker container per LangGraph thread when
-the first file or command tool runs. The thread workspace is mounted read-write
-at `/workspace`; the rest of the container is constrained as follows:
+The Lead Agent creates or reuses one sandbox per LangGraph thread when the
+first file or command tool runs. The thread workspace is mapped to the virtual
+root `/`; the sandbox is constrained as follows:
 
 - read-only root filesystem;
 - host-network access;
@@ -113,14 +113,25 @@ so dependencies can be installed at runtime, but the root filesystem is
 read-only, so dependencies must be installed into `/workspace` to survive
 container recreation.
 
+## Local Sandbox
+
+For single-user, trusted local deployments the file tools can run directly on
+the host filesystem instead of inside Docker. Select the local provider with
+`ZHARNESS_SANDBOX_PROVIDER=local`. Each thread then reads and writes a local
+directory through the same virtual `/` path space and path-safety checks as the
+Docker backend.
+
 Sandbox environment variables:
 
 | Variable | Default | Description |
 | --- | --- | --- |
+| `ZHARNESS_SANDBOX_PROVIDER` | `docker` | Sandbox backend: `docker` or `local` |
 | `ZHARNESS_SANDBOX_IMAGE` | `zharness-sandbox:latest` | Docker image name |
 | `ZHARNESS_SANDBOX_MEMORY` | `512m` | Container memory limit |
 | `ZHARNESS_SANDBOX_USER` | Server process UID/GID | Container user, for example `1000:1000` |
 | `ZHARNESS_HOME` | `./.zharness` | Parent directory for thread workspaces |
+| `ZHARNESS_LOCAL_ROOT` | None | Local sandbox root shared by every thread (otherwise each thread gets `ZHARNESS_HOME/workspaces/<thread_id>`) |
+| `ZHARNESS_ALLOW_HOST_BASH` | Disabled | Enable host bash execution in the local sandbox (`1`/`true`/`yes`) |
 
 Commands are limited to 128 KiB of text and a timeout between 1 and 300 seconds.
 Retained output is limited to 1 MiB by default. Sandbox file uploads and

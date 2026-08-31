@@ -106,14 +106,23 @@ docker build -f docker/sandbox.Dockerfile -t zharness-sandbox:latest .
 wget 和 C 编译工具链。容器可联网，可在运行时安装依赖，但根文件系统只读，
 依赖需安装到 `/workspace` 才能在容器重建后保留。
 
+## 本地沙箱
+
+在单用户、完全可信的本地环境中，文件工具可以不经过 Docker，直接在宿主文件系统上
+运行。设置 `ZHARNESS_SANDBOX_PROVIDER=local` 即可启用：每个 thread 通过同一套
+虚拟 `/` 路径空间与路径安全校验，读写宿主上的本地目录。
+
 沙箱相关环境变量：
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
+| `ZHARNESS_SANDBOX_PROVIDER` | `docker` | 沙箱后端：`docker` 或 `local` |
 | `ZHARNESS_SANDBOX_IMAGE` | `zharness-sandbox:latest` | Docker 镜像名称 |
 | `ZHARNESS_SANDBOX_MEMORY` | `512m` | 容器内存限制 |
 | `ZHARNESS_SANDBOX_USER` | 服务进程 UID/GID | 容器运行用户，例如 `1000:1000` |
-| `ZHARNESS_HOME` | `./.zharness` | thread 工作区所在目录 |
+| `ZHARNESS_HOME` | `./.zharness` | thread 工作区父目录 |
+| `ZHARNESS_LOCAL_ROOT` | 无 | 本地沙箱根目录，所有 thread 共享（不设置则为各 thread 独立的 `ZHARNESS_HOME/workspaces/<thread_id>`） |
+| `ZHARNESS_ALLOW_HOST_BASH` | 关闭 | 是否允许本地沙箱执行宿主 bash（`1`/`true`/`yes`） |
 
 命令长度上限为 128 KiB，超时参数范围为 1 至 300 秒，保留输出默认最多 1 MiB。
 沙箱文件上传或下载的单文件默认上限为 16 MiB。

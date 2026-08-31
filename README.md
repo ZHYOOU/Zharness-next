@@ -17,8 +17,9 @@ future gateway layer.
 - Workspace and execution-container isolation by LangGraph `thread_id`.
 - Tools for directory listing, file reading and writing, exact edits, deletion,
   glob matching, and text search.
-- Shell execution in resource-constrained Docker containers with host-network
-  access and a read-only root filesystem.
+- Pluggable sandbox providers: hardened Docker containers by default, or a
+  local filesystem sandbox (`ZHARNESS_SANDBOX_PROVIDER=local`) for trusted
+  local projects.
 - Todo-based planning for multi-step tasks and automatic summarization of long
   conversations.
 - Container cleanup when a thread is deleted, and graceful sandbox shutdown
@@ -169,11 +170,15 @@ ZHARNESS_RUN_DOCKER_TESTS=1 uv run pytest zharness/tests/test_docker_integration
 ## Current Limitations
 
 - The model factory currently creates only a DeepSeek chat model.
-- Workspace file tools operate on UTF-8 text through the same Docker sandbox as
-  shell commands. Sandbox transfers have a default 16 MiB per-file limit.
+- Workspace file tools operate on UTF-8 text through the same sandbox as shell
+  commands. Sandbox transfers have a default 16 MiB per-file limit.
 - Shell commands may run for at most 300 seconds, with retained output limited
   to 1 MiB by default.
 - Docker sandboxes have network access through the host bridge, but the root
   filesystem is read-only, so runtime dependencies must be installed into
   `/workspace` or baked into the sandbox image.
+- The local sandbox provider is intended for single-user, trusted local
+  environments only: its path-safety checks are the only boundary between the
+  agent and the host filesystem, and host bash execution is disabled unless
+  `ZHARNESS_ALLOW_HOST_BASH=1` is set explicitly.
 - `gateway` does not yet implement authentication, forwarding, or business APIs.

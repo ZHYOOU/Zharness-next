@@ -224,13 +224,27 @@ class DockerSandboxManager:
             )
 
 
-_manager: DockerSandboxManager | None = None
+_manager: DockerSandboxManager | object | None = None
 _manager_lock = threading.Lock()
 
 
-def get_sandbox_manager() -> DockerSandboxManager:
+def get_sandbox_manager() -> DockerSandboxManager | object:
+    """Return the sandbox manager for the configured provider.
+
+    ``ZHARNESS_SANDBOX_PROVIDER=local`` selects the local filesystem sandbox;
+    anything else selects the Docker sandbox.
+    """
     global _manager
     with _manager_lock:
         if _manager is None:
-            _manager = DockerSandboxManager()
+            provider = os.environ.get("ZHARNESS_SANDBOX_PROVIDER", "docker").lower()
+            if provider == "local":
+                from zharness.sandbox.local import (
+                    LocalSandboxManager,
+                    LocalSandboxSettings,
+                )
+
+                _manager = LocalSandboxManager(settings=LocalSandboxSettings.from_env())
+            else:
+                _manager = DockerSandboxManager()
         return _manager

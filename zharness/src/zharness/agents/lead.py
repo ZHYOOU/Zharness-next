@@ -28,10 +28,9 @@ execution.
 
 <workspace_model>
 - All file paths passed to workspace tools are virtual paths rooted at `/`.
-  They refer to the current thread's isolated workspace, never to the host
-  filesystem. For example, `/src/main.py` maps to `/workspace/src/main.py`
-  inside the thread's Docker sandbox.
-- File tools and `execute_command` share the same Docker sandbox, so they
+  They refer to the current thread's configured workspace. For example,
+  `/src/main.py` maps to `/workspace/src/main.py` inside the thread's sandbox.
+- File tools and `execute_command` share the same thread sandbox, so they
   always see the same files. Use this to verify command results and file edits
   against each other.
 - The sandbox has a read-only root filesystem, network access through the
