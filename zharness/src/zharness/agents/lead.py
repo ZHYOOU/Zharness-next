@@ -1,6 +1,11 @@
 from langchain.agents import create_agent
-from langchain.agents.middleware import SummarizationMiddleware, TodoListMiddleware
+from langchain.agents.middleware import (
+    HumanInTheLoopMiddleware,
+    SummarizationMiddleware,
+    TodoListMiddleware,
+)
 from langchain_core.language_models import BaseChatModel
+from langgraph.checkpoint.base import BaseCheckpointSaver
 
 from zharness.tools.execute import execute_command
 from zharness.tools.workspace import (
@@ -22,7 +27,11 @@ inside an isolated container whose /workspace directory is this virtual root.
 
 
 # noinspection PyTypeChecker
-def create_lead_agent(model: BaseChatModel):
+def create_lead_agent(
+    model: BaseChatModel,
+    *,
+    checkpointer: BaseCheckpointSaver | None = None,
+):
     return create_agent(
         name="lead_agent",
         model=model,
@@ -43,6 +52,14 @@ def create_lead_agent(model: BaseChatModel):
                 trigger=("tokens", 4000),
                 keep=("messages", 8),
             ),
+            HumanInTheLoopMiddleware(
+                interrupt_on={
+                    "execute_command": {
+                        "allowed_decisions": ["approve", "reject"],
+                    }
+                }
+            ),
         ],
         system_prompt=SYSTEM_PROMPT,
+        checkpointer=checkpointer,
     )

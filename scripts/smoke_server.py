@@ -12,20 +12,32 @@ load_dotenv(ZHARNESS_ENV_FILE, override=False)
 async def run_turn(
     client,
     thread_id: str,
-    message: str,
+    message: str | None = None,
+    *,
+    command: dict | None = None,
 ) -> None:
+    if (message is None) == (command is None):
+        raise ValueError("Provide exactly one of message or command")
+
+    request = (
+        {
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": message,
+                    }
+                ]
+            }
+        }
+        if message is not None
+        else {"command": command}
+    )
     async for event in client.runs.stream(
         thread_id,
         "lead_agent",
-        input={
-            "messages": [
-                {
-                    "role": "user",
-                    "content": message,
-                }
-            ]
-        },
         stream_mode="updates",
+        **request,
     ):
         print(event.event, event.data)
 
@@ -150,6 +162,26 @@ async def main() -> None:
             f"printf '%s' '{docker_content}' > docker-result.txt "
             "&& cat docker-result.txt"
         ),
+    )
+
+    interrupted_state = await client.threads.get_state(docker_thread_id)
+    interrupts = [
+        interrupt
+        for task in interrupted_state.get("tasks", [])
+        for interrupt in task.get("interrupts", [])
+    ]
+
+    assert len(interrupts) == 1
+    action_requests = interrupts[0]["value"]["action_requests"]
+    assert action_requests[0]["name"] == "execute_command"
+    assert docker_content in action_requests[0]["args"]["command"]
+    assert not (docker_workspace / "docker-result.txt").exists()
+    print("docker sandbox execution interrupted for approval: ok")
+
+    await run_turn(
+        client,
+        docker_thread_id,
+        command={"resume": {"decisions": [{"type": "approve"}]}},
     )
 
     docker_state = await client.threads.get_state(docker_thread_id)
