@@ -26,6 +26,7 @@ ZHarness Next 是一个面向 AI 编程场景的 Agent 运行底座。它基于 
 │   └── sandbox.Dockerfile    # Agent 命令执行环境
 ├── gateway/                  # 预留的外部网关包
 ├── scripts/
+│   ├── cleanup.py            # 清理会话、工作区与沙箱
 │   └── smoke_server.py       # 服务端到端冒烟验证
 ├── zharness/                 # Agent、工具、工作区和沙箱实现
 ├── langgraph.json            # LangGraph 图与 HTTP 应用配置
@@ -112,6 +113,21 @@ uv run python scripts/smoke_server.py
 
 脚本会验证线程工作区读取、文件写入、文件编辑、Todo 任务规划、Docker 沙箱命令执行
 以及工作区挂载。
+
+### 6. 清理运行数据
+
+如需重置全部运行时状态——LangGraph 会话历史、各线程工作区以及 Docker 沙箱容器——
+请在项目根目录执行清理脚本：
+
+```bash
+uv run --package zharness python scripts/cleanup.py --dry-run   # 预览将删除的内容
+uv run --package zharness python scripts/cleanup.py -y          # 执行清理
+```
+
+可以通过 `--sessions`、`--workspaces`、`--sandboxes` 限定要清理的内容，加
+`--caches` 同时清理 Python/静态检查缓存，加 `--remove-image` 一并删除沙箱镜像。
+使用 `--dry-run` 预览，`-y` 跳过确认提示（非交互环境必须加上）。服务会在需要时重新
+创建这些状态，因此即使服务已停止也可以安全执行。
 
 ## 开发与测试
 

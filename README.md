@@ -32,6 +32,7 @@ future gateway layer.
 │   └── sandbox.Dockerfile    # Agent command-execution environment
 ├── gateway/                  # Placeholder for a future external gateway
 ├── scripts/
+│   ├── cleanup.py            # Remove sessions, workspaces, and sandboxes
 │   └── smoke_server.py       # End-to-end server smoke test
 ├── zharness/                 # Agent, tools, workspace, and sandbox runtime
 ├── langgraph.json            # LangGraph graph and HTTP application config
@@ -124,6 +125,23 @@ uv run python scripts/smoke_server.py
 
 The script verifies workspace reads, file writes and edits, Todo-based task
 planning, Docker sandbox command execution, and the workspace mount.
+
+### 6. Clean up runtime data
+
+To reset all runtime state — LangGraph session history, per-thread workspaces,
+and the Docker sandbox containers — run the cleanup script from the repository
+root:
+
+```bash
+uv run --package zharness python scripts/cleanup.py --dry-run   # preview
+uv run --package zharness python scripts/cleanup.py -y          # apply
+```
+
+You can limit what gets cleaned with `--sessions`, `--workspaces`, and
+`--sandboxes`, add Python/lint caches with `--caches`, or also delete the sandbox
+image with `--remove-image`. Use `--dry-run` to preview, and `-y` to skip the
+confirmation prompt (required for non-interactive use). The server recreates all
+of this state on demand, so it is safe to run while the server is stopped.
 
 ## Development and Testing
 
