@@ -1,8 +1,19 @@
-from pathlib import Path
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 
+import pytest
 from langchain.tools import ToolRuntime
+from zharness.sandbox.protocol import (
+    DeleteResult,
+    EditResult,
+    GlobResult,
+    GrepResult,
+    LsResult,
+    ReadResult,
+    WriteResult,
+)
+from zharness.sandbox.workspace import SandboxWorkspace, SandboxWorkspaceError
+from zharness.tools import workspace as workspace_module
 from zharness.tools.workspace import (
     delete_path,
     edit_file,
@@ -21,6 +32,87 @@ def runtime_for(thread_id: str | None) -> ToolRuntime:
     )
 
 
+class RecordingSandbox:
+    def __init__(self) -> None:
+        self.calls: list[tuple[object, ...]] = []
+
+    def ls(self, path: str) -> LsResult:
+        self.calls.append(("ls", path))
+        return LsResult(
+            entries=[
+                {
+                    "path": "/workspace/notes/result.txt",
+                    "is_dir": False,
+                    "size": 6,
+                },
+                {"path": "/workspace/notes/archive", "is_dir": True},
+            ]
+        )
+
+    def read(self, path: str, offset: int, limit: int) -> ReadResult:
+        self.calls.append(("read", path, offset, limit))
+        return ReadResult(file_data={"content": "two", "encoding": "utf-8"})
+
+    def write(self, path: str, content: str) -> WriteResult:
+        self.calls.append(("write", path, content))
+        return WriteResult(path=path)
+
+    def edit(
+        self,
+        path: str,
+        old_string: str,
+        new_string: str,
+        replace_all: bool = False,
+    ) -> EditResult:
+        self.calls.append(("edit", path, old_string, new_string, replace_all))
+        return EditResult(path=path, occurrences=2 if replace_all else 1)
+
+    def delete(self, path: str) -> DeleteResult:
+        self.calls.append(("delete", path))
+        return DeleteResult(path=path)
+
+    def glob(self, pattern: str, path: str | None = None) -> GlobResult:
+        self.calls.append(("glob", pattern, path))
+        return GlobResult(
+            matches=[{"path": "/workspace/notes/result.txt", "is_dir": False}]
+        )
+
+    def grep(
+        self,
+        pattern: str,
+        path: str | None = None,
+        glob: str | None = None,
+        *,
+        max_count: int | None = None,
+    ) -> GrepResult:
+        self.calls.append(("grep", pattern, path, glob, max_count))
+        return GrepResult(
+            matches=[
+                {
+                    "path": "/workspace/notes/result.txt",
+                    "line": 2,
+                    "text": "needle",
+                }
+            ]
+        )
+
+
+def install_manager(monkeypatch: pytest.MonkeyPatch, sandbox: object) -> list[str]:
+    thread_ids: list[str] = []
+
+    def for_thread(thread_id: str) -> object:
+        thread_ids.append(thread_id)
+        return sandbox
+
+    manager = SimpleNamespace(for_thread=for_thread)
+    monkeypatch.setattr(workspace_module, "get_sandbox_manager", lambda: manager)
+    return thread_ids
+
+
+def make_workspace(sandbox: object) -> SandboxWorkspace:
+    return SandboxWorkspace(cast(Any, sandbox))
+
+
 def test_runtime_is_hidden_from_all_model_schemas() -> None:
     assert set(list_workspace.args) == {"path"}
     assert set(read_file.args) == {"path", "offset", "limit"}
@@ -36,8 +128,9 @@ def test_runtime_is_hidden_from_all_model_schemas() -> None:
     assert set(grep_files.args) == {"pattern", "path", "include"}
 
 
-def test_tools_use_server_thread_workspace(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("ZHARNESS_HOME", str(tmp_path))
+def test_tools_use_one_thread_sandbox_and_map_virtual_paths(monkeypatch) -> None:
+    sandbox = RecordingSandbox()
+    thread_ids = install_manager(monkeypatch, sandbox)
     runtime = runtime_for("thread-one")
 
     assert write_file.func("/notes/result.txt", "one\ntwo", runtime=runtime) == (
@@ -54,17 +147,37 @@ def test_tools_use_server_thread_workspace(tmp_path: Path, monkeypatch) -> None:
     assert grep_files.func("needle", runtime=runtime) == [
         {"path": "/notes/result.txt", "line": 2, "text": "needle"}
     ]
-
-    entries = list_workspace.func("/notes", runtime=runtime)
-    assert isinstance(entries, list)
-    assert entries[0]["path"] == "/notes/result.txt"
+    assert list_workspace.func("/notes", runtime=runtime) == [
+        {"path": "/notes/result.txt", "is_dir": False, "size": 6},
+        {"path": "/notes/archive/", "is_dir": True},
+    ]
     assert delete_path.func("/notes", runtime=runtime) == "Deleted /notes"
-    assert not (tmp_path / "workspaces" / "thread-one" / "notes").exists()
-    assert not (tmp_path / "workspaces" / "thread-two").exists()
+
+    assert thread_ids == ["thread-one"] * 7
+    assert sandbox.calls == [
+        ("write", "/workspace/notes/result.txt", "one\ntwo"),
+        ("read", "/workspace/notes/result.txt", 1, 1),
+        ("edit", "/workspace/notes/result.txt", "two", "needle", False),
+        ("glob", "*.txt", "/workspace/notes"),
+        ("grep", "needle", "/workspace", None, None),
+        ("ls", "/workspace/notes"),
+        ("delete", "/workspace/notes"),
+    ]
 
 
-def test_tool_errors_are_recoverable(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("ZHARNESS_HOME", str(tmp_path))
+@pytest.mark.parametrize("path", ["../secret", "a/../../secret", "~/.ssh", "a\0b"])
+def test_adapter_rejects_unsafe_paths_before_backend_access(path: str) -> None:
+    sandbox = RecordingSandbox()
+    workspace = make_workspace(sandbox)
+
+    with pytest.raises(SandboxWorkspaceError):
+        workspace.read(path)
+    assert sandbox.calls == []
+
+
+def test_tool_errors_are_recoverable_and_root_delete_is_blocked(monkeypatch) -> None:
+    sandbox = RecordingSandbox()
+    install_manager(monkeypatch, sandbox)
     runtime = runtime_for("thread-one")
 
     assert read_file.func("../missing.txt", runtime=runtime) == (
@@ -73,9 +186,32 @@ def test_tool_errors_are_recoverable(tmp_path: Path, monkeypatch) -> None:
     assert delete_path.func("/", runtime=runtime) == (
         "Error: Cannot delete the workspace root"
     )
+    assert sandbox.calls == []
 
 
-def test_tools_fail_closed_without_server_thread_identity() -> None:
+def test_adapter_rejects_backend_paths_outside_workspace() -> None:
+    sandbox = RecordingSandbox()
+    sandbox.ls = lambda path: LsResult(entries=[{"path": "/etc/passwd"}])  # type: ignore[method-assign]
+    workspace = make_workspace(sandbox)
+
+    with pytest.raises(SandboxWorkspaceError, match="outside the workspace"):
+        workspace.ls()
+
+
+def test_adapter_rejects_binary_reads() -> None:
+    sandbox = RecordingSandbox()
+    sandbox.read = lambda path, offset, limit: ReadResult(  # type: ignore[method-assign]
+        file_data={"content": "AA==", "encoding": "base64"}
+    )
+    workspace = make_workspace(sandbox)
+
+    with pytest.raises(SandboxWorkspaceError, match="not UTF-8"):
+        workspace.read("binary.bin")
+
+
+def test_tools_fail_closed_without_server_thread_identity(monkeypatch) -> None:
+    sandbox = RecordingSandbox()
+    thread_ids = install_manager(monkeypatch, sandbox)
     missing_execution = cast(ToolRuntime, SimpleNamespace(execution_info=None))
     missing_thread = runtime_for(None)
 
@@ -89,22 +225,21 @@ def test_tools_fail_closed_without_server_thread_identity() -> None:
         assert write_file.func("hello.txt", "hello", runtime=runtime) == (
             "Error: Server thread identity is unavailable"
         )
+    assert thread_ids == []
 
 
-def test_client_context_cannot_change_workspace(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("ZHARNESS_HOME", str(tmp_path / "server-home"))
-    client_workspace = tmp_path / "client-workspace"
-    client_workspace.mkdir()
-    (client_workspace / "secret.txt").write_text("secret", encoding="utf-8")
+def test_client_context_cannot_change_sandbox(monkeypatch) -> None:
+    sandbox = RecordingSandbox()
+    thread_ids = install_manager(monkeypatch, sandbox)
     runtime = cast(
         ToolRuntime,
         SimpleNamespace(
             execution_info=SimpleNamespace(thread_id="thread-one"),
-            context={"workspace_path": str(client_workspace)},
+            context={"workspace_path": "/untrusted/client/path"},
         ),
     )
 
-    assert list_workspace.func(runtime=runtime) == []
-    assert read_file.func("secret.txt", runtime=runtime) == (
-        "Error: File not found: secret.txt"
-    )
+    list_workspace.func(runtime=runtime)
+
+    assert thread_ids == ["thread-one"]
+    assert sandbox.calls == [("ls", "/workspace")]

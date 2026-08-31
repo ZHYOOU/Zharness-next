@@ -3,7 +3,7 @@
 [English](README.md) | 简体中文
 
 `zharness` 是 ZHarness Next 的核心 Python 包，负责创建 Lead Agent、暴露工作区工具，
-并管理线程级 Docker 命令执行沙箱。
+并管理线程级 Docker 文件与命令执行沙箱。
 
 ## 模块结构
 
@@ -17,13 +17,13 @@ src/zharness/
 │   ├── docker.py            # Docker 沙箱实现
 │   ├── manager.py           # thread 与容器的生命周期映射
 │   ├── protocol.py          # 执行、上传和下载结果类型
-│   └── sandbox.py           # 沙箱抽象接口
+│   ├── sandbox.py           # 沙箱抽象接口
+│   └── workspace.py         # 虚拟 / 到沙箱 /workspace 的适配器
 ├── tools/
 │   ├── execute.py           # Agent 命令执行工具
 │   └── workspace.py         # Agent 文件系统工具
 ├── workspace/
-│   ├── filesystem.py        # 受约束的虚拟文件系统
-│   └── paths.py             # thread 工作区路径解析
+│   └── paths.py             # thread 工作区宿主机挂载路径解析
 ├── graph.py                 # LangGraph 图入口
 └── http.py                  # 容器清理中间件和服务生命周期
 ```
@@ -73,21 +73,21 @@ ${ZHARNESS_HOME}/workspaces/<thread_id>/
 若未配置 `ZHARNESS_HOME`，默认使用当前工作目录下的 `.zharness`。thread ID 只允许
 字母、数字、下划线和连字符，最长 128 个字符。
 
-Agent 看到的路径是以 `/` 开始的虚拟路径。例如 `/src/main.py` 实际指向当前 thread
-工作区内的 `src/main.py`。文件系统会拒绝：
+Agent 看到的路径是以 `/` 开始的虚拟路径。例如 `/src/main.py` 会映射到当前 thread
+Docker 沙箱内的 `/workspace/src/main.py`。文件工具和 `execute_command` 共用同一个
+`BaseSandbox` 后端，因此看到完全相同的文件。适配器会拒绝：
 
 - `..` 路径穿越和 `~` 展开；
-- 通过软链接逃逸工作区；
-- 覆盖软链接或操作非普通文件；
-- 超过默认 256 KiB 的读写内容。
+- 在需要文件路径时操作虚拟根目录；
+- 通过仅支持 UTF-8 的 Agent 工具读取二进制文件。
 
-Glob 和 Grep 默认最多返回 100 条结果。文件写入通过临时文件加 `os.replace` 完成，
-避免留下部分写入的目标文件。
+文件读写、编辑、删除、Glob 和 Grep 都委托给线程级沙箱后端完成。
 
 ## Docker 沙箱
 
-Lead Agent 为每个 LangGraph thread 创建或复用一个 Docker 容器。thread 工作区以
-读写方式挂载到容器内的 `/workspace`，容器其余部分受到以下限制：
+Lead Agent 在首次运行文件或命令工具时，为每个 LangGraph thread 创建或复用一个
+Docker 容器。thread 工作区以读写方式挂载到容器内的 `/workspace`，容器其余部分受到
+以下限制：
 
 - 根文件系统只读；
 - 禁用网络；

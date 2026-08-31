@@ -4,7 +4,7 @@ English | [简体中文](README.zh-CN.md)
 
 `zharness` is the core Python package of ZHarness Next. It creates the Lead
 Agent, exposes workspace tools, and manages thread-scoped Docker sandboxes for
-command execution.
+file and command execution.
 
 ## Package Layout
 
@@ -18,13 +18,13 @@ src/zharness/
 │   ├── docker.py            # Docker sandbox implementation
 │   ├── manager.py           # Thread-to-container lifecycle mapping
 │   ├── protocol.py          # Execution and file-transfer result types
-│   └── sandbox.py           # Sandbox abstraction
+│   ├── sandbox.py           # Sandbox abstraction
+│   └── workspace.py         # Virtual / to sandbox /workspace adapter
 ├── tools/
 │   ├── execute.py           # Agent command-execution tool
 │   └── workspace.py         # Agent filesystem tools
 ├── workspace/
-│   ├── filesystem.py        # Constrained virtual filesystem
-│   └── paths.py             # Thread workspace path resolution
+│   └── paths.py             # Thread workspace host-mount resolution
 ├── graph.py                 # LangGraph graph entry point
 └── http.py                  # Cleanup middleware and server lifespan
 ```
@@ -77,22 +77,22 @@ working directory. Thread IDs may contain letters, digits, underscores, and
 hyphens, with a maximum length of 128 characters.
 
 Paths exposed to the agent are virtual paths beginning at `/`. For example,
-`/src/main.py` refers to `src/main.py` inside the current thread's workspace.
-The filesystem rejects:
+`/src/main.py` maps to `/workspace/src/main.py` inside the current thread's
+Docker sandbox. File tools and `execute_command` therefore share one
+`BaseSandbox` backend and see the same files. The adapter rejects:
 
 - `..` path traversal and `~` expansion;
-- symlinks that escape the workspace;
-- attempts to overwrite symlinks or operate on non-regular files;
-- reads or writes above the default 256 KiB limit.
+- attempts to operate on the virtual root where a file path is required;
+- binary reads through the UTF-8-only Agent tool contract.
 
 Glob and Grep return at most 100 results by default. Writes use a temporary file
 followed by `os.replace` to avoid leaving a partially written destination.
 
 ## Docker Sandbox
 
-The Lead Agent creates or reuses one Docker container per LangGraph thread. The
-thread workspace is mounted read-write at `/workspace`; the rest of the
-container is constrained as follows:
+The Lead Agent creates or reuses one Docker container per LangGraph thread when
+the first file or command tool runs. The thread workspace is mounted read-write
+at `/workspace`; the rest of the container is constrained as follows:
 
 - read-only root filesystem;
 - no network access;

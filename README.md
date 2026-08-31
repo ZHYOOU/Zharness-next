@@ -3,8 +3,8 @@
 English | [简体中文](README.zh-CN.md)
 
 ZHarness Next is an agent runtime for AI-assisted coding. It uses LangGraph to
-orchestrate agents, provides a thread-scoped workspace for file operations, and
-runs shell commands in a dedicated Docker sandbox for each thread.
+orchestrate agents and runs both file operations and shell commands through a
+dedicated Docker sandbox for each thread.
 
 The project is still in an early stage of development. `zharness` contains the
 main runtime capabilities, while `gateway` is currently a placeholder for a
@@ -45,10 +45,10 @@ future gateway layer.
 2. The agent calls workspace tools or the command-execution tool as needed.
 3. Each thread uses `${ZHARNESS_HOME}/workspaces/<thread_id>` as its isolated
    workspace.
-4. On the first command, the server creates a Docker container for that thread
-   and mounts the workspace at `/workspace`.
-5. Later commands in the same thread reuse the workspace and container. Deleting
-   the thread also removes its container.
+4. On the first file or command operation, the server creates a Docker container
+   for that thread and mounts the workspace at `/workspace`.
+5. Later operations in the same thread reuse the workspace and container.
+   Deleting the thread also removes its container.
 
 The `/` path exposed to agent tools is the current thread's virtual workspace
 root, not the host filesystem root.
@@ -57,7 +57,7 @@ root, not the host filesystem root.
 
 - Python 3.14 or later
 - [uv](https://docs.astral.sh/uv/)
-- Docker Engine for command execution
+- Docker Engine for file and command execution
 - A DeepSeek API key
 
 Rootless Docker is recommended in production and shared environments. The
@@ -151,8 +151,8 @@ ZHARNESS_RUN_DOCKER_TESTS=1 uv run pytest zharness/tests/test_docker_integration
 ## Current Limitations
 
 - The model factory currently creates only a DeepSeek chat model.
-- Workspace file tools operate on UTF-8 text and impose a default 256 KiB limit
-  per file.
+- Workspace file tools operate on UTF-8 text through the same Docker sandbox as
+  shell commands. Sandbox transfers have a default 16 MiB per-file limit.
 - Shell commands may run for at most 300 seconds, with retained output limited
   to 1 MiB by default.
 - Docker sandboxes have no network access and cannot download dependencies at

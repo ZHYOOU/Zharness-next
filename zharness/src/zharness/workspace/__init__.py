@@ -1,13 +1,1 @@
-from zharness.workspace.filesystem import (
-    FileInfo,
-    GrepMatch,
-    WorkspaceFilesystem,
-    WorkspaceFilesystemError,
-)
-
-__all__ = [
-    "FileInfo",
-    "GrepMatch",
-    "WorkspaceFilesystem",
-    "WorkspaceFilesystemError",
-]
+"""Host workspace path resolution for thread-scoped sandboxes."""

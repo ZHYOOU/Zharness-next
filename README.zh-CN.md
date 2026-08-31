@@ -3,8 +3,7 @@
 [English](README.md) | 简体中文
 
 ZHarness Next 是一个面向 AI 编程场景的 Agent 运行底座。它基于 LangGraph
-组织智能体，通过线程级工作区读写文件，并为每个线程提供独立的 Docker
-命令执行沙箱。
+组织智能体，并让每个线程的文件操作和 Shell 命令统一通过独立的 Docker 沙箱执行。
 
 项目目前处于早期开发阶段：`zharness` 已包含主要运行能力，`gateway` 仍是为后续
 网关层预留的包。
@@ -39,7 +38,7 @@ ZHarness Next 是一个面向 AI 编程场景的 Agent 运行底座。它基于 
 1. 客户端创建 LangGraph thread，并向 `lead_agent` 提交消息。
 2. Agent 根据请求调用工作区工具或命令执行工具。
 3. 每个 thread 使用 `${ZHARNESS_HOME}/workspaces/<thread_id>` 作为独立工作区。
-4. 首次执行命令时，服务创建该 thread 专属的 Docker 容器，并将工作区挂载到
+4. 首次执行文件或命令操作时，服务创建该 thread 专属的 Docker 容器，并将工作区挂载到
    容器内的 `/workspace`。
 5. 同一 thread 后续复用工作区和容器；删除 thread 时同步删除容器。
 
@@ -49,7 +48,7 @@ Agent 工具中的 `/` 是当前 thread 的虚拟工作区根目录，并非宿�
 
 - Python 3.14 或更高版本
 - [uv](https://docs.astral.sh/uv/)
-- Docker Engine（命令执行功能需要）
+- Docker Engine（文件和命令执行功能需要）
 - DeepSeek API Key
 
 生产或共享环境建议使用 rootless Docker。服务进程需要访问 Docker Engine，但不要
@@ -138,7 +137,8 @@ ZHARNESS_RUN_DOCKER_TESTS=1 uv run pytest zharness/tests/test_docker_integration
 ## 当前限制
 
 - 模型工厂当前只创建 DeepSeek Chat Model。
-- 工作区文件工具面向 UTF-8 文本，单文件默认上限为 256 KiB。
+- 工作区文件工具面向 UTF-8 文本，与 Shell 命令共用同一个 Docker 沙箱；沙箱传输的
+  默认单文件上限为 16 MiB。
 - Shell 命令最长运行 300 秒，保留输出默认最多 1 MiB。
 - Docker 沙箱没有网络，无法在运行期间下载依赖。
 - `gateway` 尚未实现鉴权、转发或业务 API。

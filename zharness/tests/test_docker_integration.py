@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 from zharness.sandbox.manager import DockerSandboxManager, DockerSandboxSettings
+from zharness.sandbox.workspace import SandboxWorkspace
 
 import docker
 
@@ -48,6 +49,18 @@ def test_real_docker_sandbox(tmp_path: Path, monkeypatch) -> None:
         download = sandbox.download_files(["/workspace/nested/upload.txt"])
         assert download[0].error is None
         assert download[0].content == b"uploaded+editable"
+
+        files = SandboxWorkspace(sandbox)
+        assert files.write("/docs/guide.txt", "alpha\nbeta") == "/docs/guide.txt"
+        assert files.read("/docs/guide.txt", offset=1, limit=1) == "beta"
+        assert files.edit("/docs/guide.txt", "beta", "needle") == 1
+        assert files.grep("needle", path="/docs") == [
+            {"path": "/docs/guide.txt", "line": 2, "text": "needle"}
+        ]
+        assert files.glob("*.txt", path="/docs") == ["/docs/guide.txt"]
+        assert [entry["path"] for entry in files.ls("/docs")] == ["/docs/guide.txt"]
+        assert files.delete("/docs") == "/docs"
+        assert not (workspace / "docs").exists()
 
         started = time.monotonic()
         timed_out = sandbox.execute("sleep 10", timeout=1)
