@@ -3,6 +3,7 @@ from langchain.agents.middleware import (
     HumanInTheLoopMiddleware,
     SummarizationMiddleware,
     TodoListMiddleware,
+    ToolCallRequest,
     ToolErrorMiddleware,
     ToolRetryMiddleware,
 )
@@ -24,6 +25,20 @@ from zharness.tools.workspace import (
     read_file,
     write_file,
 )
+
+APPROVAL_STRATEGY_KEY = "approval_strategy"
+APPROVAL_STRATEGY_ALLOW_ALL = "allow_all"
+APPROVAL_STRATEGY_REQUIRE_APPROVAL = "require_approval"
+
+
+def _requires_execute_approval(request: ToolCallRequest) -> bool:
+    """Check whether command execution requires approval. / 检查命令执行是否需要审批。"""
+    configurable = request.runtime.config.get("configurable", {})
+    strategy = configurable.get(
+        APPROVAL_STRATEGY_KEY,
+        APPROVAL_STRATEGY_ALLOW_ALL,
+    )
+    return strategy != APPROVAL_STRATEGY_ALLOW_ALL
 
 
 def _format_tool_error(exc: Exception, request) -> str | None:
@@ -81,10 +96,10 @@ shell command execution.
   `grep_files` to understand the workspace instead of assuming file contents.
 - Prefer targeted changes. Use `edit_file` for small edits to existing files
   rather than rewriting whole files with `write_file`.
-- `execute_command` pauses the run for explicit user approval before the command
-  is executed. Before requesting one, state clearly what the command will do
-  and why. Commands run at most 300 seconds, retain at most 1 MiB of output,
-  and keep them focused and self-contained.
+- `execute_command` pauses the run for explicit user approval when the runtime
+  uses the `require_approval` strategy. Before requesting one, state clearly
+  what the command will do and why. Commands run at most 300 seconds, retain at
+  most 1 MiB of output, and keep them focused and self-contained.
 - Never use `execute_command` to bypass the virtual workspace boundary. When
   the local provider enables host bash, commands run with the server process's
   host permissions, so keep every command scoped to the user's requested
@@ -157,6 +172,7 @@ def create_lead_agent(
                 interrupt_on={
                     "execute_command": {
                         "allowed_decisions": ["approve", "reject"],
+                        "when": _requires_execute_approval,
                     }
                 }
             ),

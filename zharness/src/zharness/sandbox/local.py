@@ -35,11 +35,11 @@ import tempfile
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Final
 
+from zharness.config import LocalSandboxSettings
 from zharness.host.paths import ensure_thread_workspace
 from zharness.sandbox.protocol import (
     FILE_NOT_FOUND,
@@ -834,37 +834,6 @@ class LocalSandbox(SandboxBackendProtocol):
         for proc in processes:
             self._terminate_process_group(proc)
         return bool(processes)
-
-
-@dataclass(frozen=True, slots=True)
-class LocalSandboxSettings:
-    """Configuration for the local sandbox provider. / 本地沙箱提供程序的配置。"""
-
-    root: str | None = None
-    allow_host_bash: bool = False
-    skills_root: str | None = None
-
-    @classmethod
-    def from_env(cls) -> LocalSandboxSettings:
-        """Build settings from environment variables. / 从环境变量构建配置。"""
-        return cls(
-            root=os.environ.get("ZHARNESS_LOCAL_ROOT"),
-            allow_host_bash=os.environ.get("ZHARNESS_ALLOW_HOST_BASH", "").lower()
-            in {"1", "true", "yes"},
-            skills_root=_env_skills_root(),
-        )
-
-
-def _env_skills_root() -> str | None:
-    """Resolve the configured skills directory for a local sandbox, if any. / 解析本地沙箱已配置的技能目录（如有）。"""
-    from zharness.skills.storage import skills_root_path
-
-    try:
-        root = skills_root_path()
-    except Exception:
-        logger.exception("Failed to resolve skills root for local sandbox")
-        return None
-    return str(root) if root.is_dir() else None
 
 
 class LocalSandboxManager:

@@ -1,9 +1,9 @@
-import os
 import re
 from pathlib import Path
 from typing import Final
 
-ZHARNESS_HOME_ENV = "ZHARNESS_HOME"
+from zharness.config.loader import get_settings
+
 THREAD_ID_PATTERN: Final = r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}"
 _THREAD_ID_PATTERN = re.compile(THREAD_ID_PATTERN)
 
@@ -15,7 +15,7 @@ class WorkspacePathError(ValueError):
 def zharness_home() -> Path:
     """Return the server-owned ZHarness data directory. / 返回服务器拥有的 ZHarness 数据目录。"""
 
-    configured_home = os.environ.get(ZHARNESS_HOME_ENV)
+    configured_home = get_settings().home
     home = Path(configured_home) if configured_home else Path.cwd() / ".zharness"
 
     try:

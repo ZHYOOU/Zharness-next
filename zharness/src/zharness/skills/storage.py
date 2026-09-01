@@ -6,14 +6,14 @@ import logging
 import os
 from pathlib import Path
 
+from zharness.config.loader import get_settings
+from zharness.host.paths import WorkspacePathError, zharness_home
 from zharness.skills.constants import (
     DEFAULT_SKILLS_CONTAINER_PATH,
     SKILL_MD_FILE,
-    ZHARNESS_SKILLS_PATH_ENV,
 )
 from zharness.skills.parser import parse_skill_file
 from zharness.skills.types import Skill, SkillCategory
-from zharness.host.paths import WorkspacePathError, zharness_home
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,8 @@ def skills_root_path() -> Path:
 
     Resolution order:
 
-    1. ``ZHARNESS_SKILLS_PATH`` environment variable.
+    1. The ``ZHARNESS_SKILLS_PATH`` environment variable or the ``skills.path``
+       YAML setting.
     2. ``<ZHARNESS_HOME>/skills`` when it exists.
     3. The checked-in repository ``skills/`` directory (source-tree fallback).
     4. ``<ZHARNESS_HOME>/skills`` (may not exist yet).
@@ -41,17 +42,17 @@ def skills_root_path() -> Path:
 
     解析顺序：
 
-    1. ``ZHARNESS_SKILLS_PATH`` 环境变量。
+    1. ``ZHARNESS_SKILLS_PATH`` 环境变量或 ``skills.path`` YAML 配置。
     2. 存在时的 ``<ZHARNESS_HOME>/skills``。
     3. 仓库内检入的 ``skills/`` 目录（源码树回退）。
     4. ``<ZHARNESS_HOME>/skills``（可能尚不存在）。
 
     返回的目录可能尚不存在；需要已有目录的调用方应检查 ``is_dir()``。
     """
-    env_path = os.environ.get(ZHARNESS_SKILLS_PATH_ENV)
-    if env_path:
+    configured_path = get_settings().skills.path
+    if configured_path:
         try:
-            return Path(env_path).expanduser().resolve(strict=False)
+            return Path(configured_path).expanduser().resolve(strict=False)
         except (OSError, RuntimeError) as exc:
             raise WorkspacePathError("Could not resolve skills path") from exc
 

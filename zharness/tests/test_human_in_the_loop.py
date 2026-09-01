@@ -6,7 +6,11 @@ from langchain_core.language_models.fake_chat_models import (
 from langchain_core.messages import AIMessage, ToolMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
-from zharness.agents.lead import create_lead_agent
+from zharness.agents.lead import (
+    APPROVAL_STRATEGY_KEY,
+    APPROVAL_STRATEGY_REQUIRE_APPROVAL,
+    create_lead_agent,
+)
 from zharness.sandbox.protocol import ExecuteResponse
 from zharness.tools import execute as execute_module
 
@@ -50,7 +54,12 @@ def test_execute_requires_approval_before_sandbox_access(monkeypatch) -> None:
         _model_requesting_execution(),
         checkpointer=InMemorySaver(),
     )
-    config = {"configurable": {"thread_id": "approval-thread"}}
+    config = {
+        "configurable": {
+            "thread_id": "approval-thread",
+            APPROVAL_STRATEGY_KEY: APPROVAL_STRATEGY_REQUIRE_APPROVAL,
+        }
+    }
 
     interrupted = agent.invoke(
         {"messages": [{"role": "user", "content": "Run the command."}]},
@@ -99,7 +108,12 @@ def test_rejected_execute_never_accesses_sandbox(monkeypatch) -> None:
         _model_requesting_execution(),
         checkpointer=InMemorySaver(),
     )
-    config = {"configurable": {"thread_id": "rejection-thread"}}
+    config = {
+        "configurable": {
+            "thread_id": "rejection-thread",
+            APPROVAL_STRATEGY_KEY: APPROVAL_STRATEGY_REQUIRE_APPROVAL,
+        }
+    }
     agent.invoke(
         {"messages": [{"role": "user", "content": "Run the command."}]},
         config,
@@ -122,3 +136,31 @@ def test_rejected_execute_never_accesses_sandbox(monkeypatch) -> None:
     ]
     assert rejected[-1].status == "error"
     assert "Command is not approved" in str(rejected[-1].content)
+
+
+def test_execute_is_allowed_without_approval_by_default(monkeypatch) -> None:
+    executions: list[tuple[str, int]] = []
+    sandbox = SimpleNamespace(
+        execute=lambda command, timeout: (
+            executions.append((command, timeout))
+            or ExecuteResponse(output="allowed", exit_code=0)
+        )
+    )
+    manager = SimpleNamespace(for_thread=lambda thread_id: sandbox)
+    monkeypatch.setattr(execute_module, "get_sandbox_manager", lambda: manager)
+    agent = create_lead_agent(
+        _model_requesting_execution(),
+        checkpointer=InMemorySaver(),
+    )
+
+    result = agent.invoke(
+        {"messages": [{"role": "user", "content": "Run the command."}]},
+        {"configurable": {"thread_id": "allow-all-thread"}},
+    )
+
+    assert "__interrupt__" not in result
+    assert executions == [("printf approved", 10)]
+    tool_messages = [
+        message for message in result["messages"] if isinstance(message, ToolMessage)
+    ]
+    assert tool_messages[-1].content == "allowed\n[exit_code=0]"

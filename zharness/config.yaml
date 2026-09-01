@@ -1,0 +1,105 @@
+# ZHarness configuration / ZHarness 配置
+#
+# This file holds non-secret settings. Secrets (API keys, the managed
+# PostgreSQL password, an explicit PostgreSQL URI) stay in `zharness/.env`,
+# which `langgraph.json` loads and which `scripts/server.sh` feeds to Docker
+# Compose. Any setting below can be overridden with the environment variable
+# named in its comment; a set environment variable always wins over this file.
+#
+# 本文件存放非敏感配置。密钥（API Key、托管 PostgreSQL 密码、显式 PostgreSQL URI）
+# 保留在 `zharness/.env` 中——`langgraph.json` 会加载它，`scripts/server.sh` 会将其
+# 传给 Docker Compose。下方的任何配置项都可通过注释中标注的环境变量覆盖；
+# 已设置的环境变量始终优先于本文件。
+
+# Chat model. / 聊天模型。
+# Override with ZHARNESS_MODEL. / 通过 ZHARNESS_MODEL 覆盖。
+model:
+  name: deepseek-chat
+  # Model provider: deepseek | openai | anthropic. Inferred from the model
+  # name when null (claude → anthropic, deepseek → deepseek, else openai).
+  # / 模型提供商：deepseek | openai | anthropic。为 null 时根据模型名推断
+  # （claude → anthropic，deepseek → deepseek，其余为 openai）。
+  # Override with ZHARNESS_MODEL_PROVIDER. / 通过 ZHARNESS_MODEL_PROVIDER 覆盖。
+  provider: null
+  # Base URL for OpenAI-compatible endpoints, e.g. Ollama or vLLM.
+  # / OpenAI 兼容端点的基础 URL，例如 Ollama 或 vLLM。
+  # Override with ZHARNESS_OPENAI_BASE_URL. / 通过 ZHARNESS_OPENAI_BASE_URL 覆盖。
+  openai_base_url: null
+  # Base URL override for the Anthropic provider. / Anthropic 提供商的基础 URL 覆盖。
+  # Override with ZHARNESS_ANTHROPIC_BASE_URL. / 通过 ZHARNESS_ANTHROPIC_BASE_URL 覆盖。
+  anthropic_base_url: null
+
+# LangGraph server bind address. / LangGraph 服务绑定地址。
+# Override with ZHARNESS_SERVER_HOST and ZHARNESS_SERVER_PORT.
+# / 通过 ZHARNESS_SERVER_HOST 和 ZHARNESS_SERVER_PORT 覆盖。
+server:
+  host: 127.0.0.1
+  port: 2024
+
+# Server-owned data directory. Leave null to default to `<cwd>/.zharness`.
+# / 服务器拥有的数据目录。留空时默认为 `<cwd>/.zharness`。
+# Override with ZHARNESS_HOME. / 通过 ZHARNESS_HOME 覆盖。
+home: null
+
+# Sandbox backend. / 沙箱后端。
+# Override with ZHARNESS_SANDBOX_PROVIDER. / 通过 ZHARNESS_SANDBOX_PROVIDER 覆盖。
+sandbox:
+  provider: docker  # docker | local
+  docker:
+    # Override with ZHARNESS_SANDBOX_IMAGE. / 通过 ZHARNESS_SANDBOX_IMAGE 覆盖。
+    image: zharness-sandbox:latest
+    # Memory limit per container. / 每容器内存上限。
+    # Override with ZHARNESS_SANDBOX_MEMORY. / 通过 ZHARNESS_SANDBOX_MEMORY 覆盖。
+    memory_limit: 512m
+    # CPU quota in nanocores. / CPU 配额（纳核）。
+    nano_cpus: 1000000000
+    # Process limit per container. / 每容器进程数上限。
+    pids_limit: 128
+    # Container user, e.g. "1000:1000"; null uses the server process UID/GID.
+    # / 容器用户，例如 "1000:1000"；null 使用服务器进程 UID/GID。
+    # Override with ZHARNESS_SANDBOX_USER. / 通过 ZHARNESS_SANDBOX_USER 覆盖。
+    user: null
+    # Network access through the host bridge; false disables it.
+    # / 通过宿主网桥访问网络；false 表示禁用。
+    # Override with ZHARNESS_SANDBOX_NETWORK. / 通过 ZHARNESS_SANDBOX_NETWORK 覆盖。
+    network_enabled: true
+  local:
+    # Shared host directory used by every thread; null gives each thread its
+    # own managed workspace under the home directory.
+    # / 所有线程共享的主机目录；null 时每个线程在 home 目录下获得独立工作区。
+    # Override with ZHARNESS_LOCAL_ROOT. / 通过 ZHARNESS_LOCAL_ROOT 覆盖。
+    root: null
+    # Allow the local provider to execute host shell commands. High trust.
+    # / 允许本地提供程序执行宿主 shell 命令。高信任级别。
+    # Override with ZHARNESS_ALLOW_HOST_BASH. / 通过 ZHARNESS_ALLOW_HOST_BASH 覆盖。
+    allow_host_bash: false
+
+# PostgreSQL checkpoint persistence. / PostgreSQL 检查点持久化。
+# Override with ZHARNESS_POSTGRES_*. / 通过 ZHARNESS_POSTGRES_* 覆盖。
+postgres:
+  # Compose-managed service; set to false to require an explicit URI.
+  # / Compose 托管服务；设为 false 时需要显式 URI。
+  managed: true
+  # Explicit connection URI; overrides the managed settings below. Keep it in
+  # `.env` because it contains credentials. / 显式连接 URI；覆盖下方托管设置。
+  # 因含凭据，请保留在 `.env` 中。通过 ZHARNESS_POSTGRES_URI 覆盖。
+  uri: null
+  user: zharness
+  # Managed password. Prefer keeping it in `.env` because it is a credential.
+  # / 托管密码。因属于凭据，建议保留在 `.env` 中。
+  # Override with ZHARNESS_POSTGRES_PASSWORD. / 通过 ZHARNESS_POSTGRES_PASSWORD 覆盖。
+  password: change-me
+  database: zharness
+  port: 5432
+
+# Skills directory override. / 技能目录覆盖。
+# Override with ZHARNESS_SKILLS_PATH. / 通过 ZHARNESS_SKILLS_PATH 覆盖。
+skills:
+  path: null
+
+# LangSmith observability. / LangSmith 可观测性。
+# Override with LANGSMITH_TRACING and LANGSMITH_PROJECT.
+# / 通过 LANGSMITH_TRACING 和 LANGSMITH_PROJECT 覆盖。
+langsmith:
+  tracing: false
+  project: null

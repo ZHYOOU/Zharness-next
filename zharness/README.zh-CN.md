@@ -12,8 +12,11 @@
 src/zharness/
 ├── agents/
 │   └── lead.py              # Lead Agent 及工具、中间件配置
+├── config/
+│   ├── loader.py            # YAML 加载与环境变量覆盖
+│   └── settings.py          # 类型化配置数据类
 ├── host/
-│   └── paths.py             # ZHARNESS_HOME 与线程工作区路径解析
+│   └── paths.py             # 数据 home 与线程工作区路径解析
 ├── models/
 │   └── factory.py           # Chat Model 工厂
 ├── sandbox/
@@ -63,38 +66,72 @@ Agent 同时启用了：
 
 - `TodoListMiddleware`：为多步骤任务维护 Todo 状态。
 - `SummarizationMiddleware`：上下文达到 4,000 tokens 时生成摘要，并保留最近 8 条消息。
-- `HumanInTheLoopMiddleware`：`execute_command` 执行前中断运行，等待显式的
-  approve/reject 决定。
+- `HumanInTheLoopMiddleware`：为 `execute_command` 提供每次运行可选的
+  `allow_all` 和 `require_approval` 策略，默认为 `allow_all`。
 - `ToolErrorMiddleware`：将工具失败格式化为可供模型修复并重试的信息。
 - `ToolRetryMiddleware`：对失败的工具调用最多重试 3 次，并带有受限的退避。
 
+## 配置
+
+### 审批策略
+
+客户端通过 `configurable.approval_strategy` 为每次运行选择 Shell 审批策略。不传时
+默认为 `allow_all`：
+
+```python
+config = {"configurable": {"approval_strategy": "allow_all"}}
+```
+
+使用 `require_approval` 可在每次调用 `execute_command` 前中断，等待用户明确
+approve/reject：
+
+```python
+config = {"configurable": {"approval_strategy": "require_approval"}}
+```
+
+客户端应在同一 thread 的每次运行中携带所选值。该策略只控制人工审批；两种模式下
+沙箱、路径、超时和输出限制都会继续生效。
+
+非敏感配置位于本包旁的 `config.yaml`；密钥保留在 `langgraph.json` 加载的 `.env` 中。
+`zharness.config.loader` 按以下优先级解析每个值：环境变量 → YAML → 内置默认值。
+这样 `ZHARNESS_HOME` 等临时覆盖仍可作为环境变量使用，同时 `config.yaml` 成为主要配置面。
+
 ## 模型配置
 
-`server/graph.py` 从 `ZHARNESS_MODEL` 读取模型名称。模型工厂（`zharness.models.factory`）
-根据 `ZHARNESS_MODEL_PROVIDER` 选择的提供商创建聊天模型——`deepseek`、`openai` 或
-`anthropic`——temperature 为 `0`，请求超时为 60 秒，最多重试 3 次。
-未设置提供商时按模型名推断：`claude*` 使用 Anthropic，`deepseek*` 使用 DeepSeek，
-其余使用 OpenAI。API Key 分别从 `DEEPSEEK_API_KEY`、`OPENAI_API_KEY` 和
-`ANTHROPIC_API_KEY` 读取。`ZHARNESS_OPENAI_BASE_URL` 可覆盖 OpenAI 兼容服务
-（Ollama、vLLM 等）的端点，`ZHARNESS_ANTHROPIC_BASE_URL` 可覆盖 Anthropic 端点。
+`server/graph.py` 从 `config.yaml` 的 `model.name`（或 `ZHARNESS_MODEL`）读取模型名称。
+模型工厂（`zharness.models.factory`）根据 `model.provider`（或 `ZHARNESS_MODEL_PROVIDER`）
+选择的提供商创建聊天模型——`deepseek`、`openai` 或 `anthropic`——temperature 为 `0`，
+请求超时为 60 秒，最多重试 3 次。未设置提供商时按模型名推断：`claude*` 使用 Anthropic，
+`deepseek*` 使用 DeepSeek，其余使用 OpenAI。API Key 分别从 `DEEPSEEK_API_KEY`、
+`OPENAI_API_KEY` 和 `ANTHROPIC_API_KEY` 读取。`model.openai_base_url`（或
+`ZHARNESS_OPENAI_BASE_URL`）可覆盖 OpenAI 兼容服务（Ollama、vLLM 等）的端点，
+`model.anthropic_base_url` 可覆盖 Anthropic 端点。
 
 最低配置如下：
 
+```yaml
+# zharness/config.yaml
+model:
+  name: deepseek-chat
+```
+
 ```dotenv
-ZHARNESS_MODEL=deepseek-chat
+# zharness/.env（仅密钥）
 DEEPSEEK_API_KEY=your-api-key
 ```
 
 其他提供商示例：
 
-```dotenv
-# OpenAI
-ZHARNESS_MODEL=gpt-4o
-OPENAI_API_KEY=your-api-key
+```yaml
+# zharness/config.yaml
+model:
+  name: gpt-4o
+  provider: openai
 
-# Anthropic
-ZHARNESS_MODEL=claude-sonnet-4-5
-ANTHROPIC_API_KEY=your-api-key
+# 或 / or
+model:
+  name: claude-sonnet-4-5
+  provider: anthropic
 ```
 
 ## 线程工作区
@@ -102,11 +139,11 @@ ANTHROPIC_API_KEY=your-api-key
 每个 LangGraph thread 对应一个服务端目录：
 
 ```text
-${ZHARNESS_HOME}/workspaces/<thread_id>/
+<home>/workspaces/<thread_id>/
 ```
 
-若未配置 `ZHARNESS_HOME`，默认使用当前工作目录下的 `.zharness`。thread ID 只允许
-字母、数字、下划线和连字符，最长 128 个字符。
+`<home>` 是 `config.yaml` 中的 `home` 键（或 `ZHARNESS_HOME`）；未配置时默认使用当前
+工作目录下的 `.zharness`。thread ID 只允许字母、数字、下划线和连字符，最长 128 个字符。
 
 Agent 看到的路径是以 `/` 开始的虚拟路径。例如 `/src/main.py` 会映射到当前 thread
 Docker 沙箱内的 `/workspace/src/main.py`。文件工具和 `execute_command` 共用同一个
@@ -123,10 +160,10 @@ Docker 沙箱内的 `/workspace/src/main.py`。文件工具和 `execute_command`
 Agent 会从一个技能目录中发现可复用的 `SKILL.md` 技能包。`LocalSkillStorage`
 按以下顺序解析该目录：
 
-1. 已设置时的 `ZHARNESS_SKILLS_PATH`；
-2. 存在时的 `<ZHARNESS_HOME>/skills`；
+1. 已设置时的 `ZHARNESS_SKILLS_PATH` 或 `skills.path` YAML 键；
+2. 存在时的 `<home>/skills`；
 3. 仓库内检入的 `skills/` 目录；
-4. 其他情况下的 `<ZHARNESS_HOME>/skills`。
+4. 其他情况下的 `<home>/skills`。
 
 技能存放在类别子目录中：`public/`（内置、只读）和 `user/`（可编辑）：
 
@@ -149,7 +186,8 @@ Docker 容器。thread 工作区以读写方式挂载到容器内的 `/workspace
 方式挂载到 `/mnt/skills`，容器其余部分受到以下限制：
 
 - 根文件系统只读；
-- 默认通过 Docker bridge 网络访问外部网络（可用 `ZHARNESS_SANDBOX_NETWORK=0` 关闭）；
+- 默认通过 Docker bridge 网络访问外部网络（可用 `sandbox.docker.network_enabled: false`
+  或 `ZHARNESS_SANDBOX_NETWORK=0` 关闭）；
 - 丢弃全部 Linux capabilities；
 - 启用 `no-new-privileges`；
 - `/tmp` 使用带 `nosuid`、`nodev` 和 `noexec` 的 tmpfs；
@@ -168,22 +206,23 @@ wget 和 C 编译工具链。容器可联网，可在运行时安装依赖，但
 ## 本地沙箱
 
 在单用户、完全可信的本地环境中，文件工具可以不经过 Docker，直接在宿主文件系统上
-运行。设置 `ZHARNESS_SANDBOX_PROVIDER=local` 即可启用：每个 thread 通过同一套
+运行。设置 `config.yaml` 中的 `sandbox.provider: local`（或
+`ZHARNESS_SANDBOX_PROVIDER=local`）即可启用：每个 thread 通过同一套
 虚拟 `/` 路径空间与路径安全校验，读写宿主上的本地目录。
 
-沙箱相关环境变量：
+沙箱相关配置键：
 
-| 变量 | 默认值 | 说明 |
+| 键 | 默认值 | 说明 |
 | --- | --- | --- |
-| `ZHARNESS_SANDBOX_PROVIDER` | `docker` | 沙箱后端：`docker` 或 `local` |
-| `ZHARNESS_SANDBOX_IMAGE` | `zharness-sandbox:latest` | Docker 镜像名称 |
-| `ZHARNESS_SANDBOX_MEMORY` | `512m` | 容器内存限制 |
-| `ZHARNESS_SANDBOX_NETWORK` | 开启 | Docker 沙箱网络访问；设为 `0`/`false`/`no` 时关闭 |
-| `ZHARNESS_SANDBOX_USER` | 服务进程 UID/GID | 容器运行用户，例如 `1000:1000` |
-| `ZHARNESS_HOME` | `./.zharness` | thread 工作区父目录 |
-| `ZHARNESS_LOCAL_ROOT` | 无 | 本地沙箱根目录，所有 thread 共享（不设置则为各 thread 独立的 `ZHARNESS_HOME/workspaces/<thread_id>`） |
-| `ZHARNESS_ALLOW_HOST_BASH` | 关闭 | 是否允许本地沙箱执行宿主 bash（`1`/`true`/`yes`） |
-| `ZHARNESS_SKILLS_PATH` | 解析出的技能根目录 | 覆盖存放 `SKILL.md` 技能包的目录 |
+| `sandbox.provider` | `docker` | 沙箱后端：`docker` 或 `local` |
+| `sandbox.docker.image` | `zharness-sandbox:latest` | Docker 镜像名称 |
+| `sandbox.docker.memory_limit` | `512m` | 容器内存限制 |
+| `sandbox.docker.network_enabled` | `true` | Docker 沙箱网络访问 |
+| `sandbox.docker.user` | 服务进程 UID/GID | 容器运行用户，例如 `1000:1000` |
+| `home` | `./.zharness` | thread 工作区父目录 |
+| `sandbox.local.root` | 无 | 本地沙箱根目录，所有 thread 共享（不设置则为各 thread 独立的 `<home>/workspaces/<thread_id>`） |
+| `sandbox.local.allow_host_bash` | `false` | 是否允许本地沙箱执行宿主 bash |
+| `skills.path` | 解析出的技能根目录 | 覆盖存放 `SKILL.md` 技能包的目录 |
 
 命令长度上限为 128 KiB，超时参数范围为 1 至 300 秒，保留输出默认最多 1 MiB。
 Docker 沙箱文件上传或下载的单文件默认上限为 16 MiB；本地文件操作默认上限为

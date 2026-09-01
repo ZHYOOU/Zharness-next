@@ -17,6 +17,7 @@ dependencies = [
     "langgraph-checkpoint-postgres>=3.0.4",
     "psycopg[binary]>=3.3.5",
     "python-dotenv>=1.2.3",
+    "pyyaml>=6.0",
     "starlette>=1.6.0",
     "wcmatch>=11.0.1",
 ]

@@ -3,6 +3,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from langgraph_sdk import get_client
+from zharness.config import get_settings
 from zharness.host.paths import ensure_thread_workspace
 
 ZHARNESS_ENV_FILE = Path(__file__).resolve().parents[1] / "zharness" / ".env"
@@ -15,6 +16,7 @@ async def run_turn(
     message: str | None = None,
     *,
     command: dict | None = None,
+    config: dict | None = None,
 ) -> None:
     if (message is None) == (command is None):
         raise ValueError("Provide exactly one of message or command")
@@ -33,6 +35,8 @@ async def run_turn(
         if message is not None
         else {"command": command}
     )
+    if config is not None:
+        request["config"] = config
     async for event in client.runs.stream(
         thread_id,
         "lead_agent",
@@ -43,7 +47,8 @@ async def run_turn(
 
 
 async def main() -> None:
-    client = get_client(url="http://127.0.0.1:2024")
+    settings = get_settings()
+    client = get_client(url=f"http://{settings.server.host}:{settings.server.port}")
 
     thread = await client.threads.create()
     thread_id = thread["thread_id"]
@@ -162,6 +167,9 @@ async def main() -> None:
             f"printf '%s' '{docker_content}' > docker-result.txt "
             "&& cat docker-result.txt"
         ),
+        config={
+            "configurable": {"approval_strategy": "require_approval"},
+        },
     )
 
     interrupted_state = await client.threads.get_state(docker_thread_id)
@@ -182,6 +190,9 @@ async def main() -> None:
         client,
         docker_thread_id,
         command={"resume": {"decisions": [{"type": "approve"}]}},
+        config={
+            "configurable": {"approval_strategy": "require_approval"},
+        },
     )
 
     docker_state = await client.threads.get_state(docker_thread_id)

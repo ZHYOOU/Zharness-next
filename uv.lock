@@ -2235,6 +2235,7 @@ dependencies = [
     { name = "langgraph-checkpoint-postgres" },
     { name = "psycopg", extra = ["binary"] },
     { name = "python-dotenv" },
+    { name = "pyyaml" },
     { name = "starlette" },
     { name = "wcmatch" },
 ]
@@ -2260,6 +2261,7 @@ requires-dist = [
     { name = "langgraph-checkpoint-postgres", specifier = ">=3.0.4" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.5" },
     { name = "python-dotenv", specifier = ">=1.2.3" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "starlette", specifier = ">=1.6.0" },
     { name = "wcmatch", specifier = ">=11.0.1" },
 ]

@@ -7,13 +7,14 @@ import json
 import logging
 import os
 import threading
-from dataclasses import dataclass
 from typing import Any, Final
 
 from docker.errors import APIError, DockerException, NotFound
 from docker.utils import parse_bytes
 
 import docker
+from zharness.config import DockerSandboxSettings
+from zharness.config.loader import get_settings
 from zharness.host.paths import ensure_thread_workspace, thread_workspace_path
 from zharness.sandbox.docker import DockerSandbox
 
@@ -21,9 +22,6 @@ SANDBOX_LABEL: Final = "zharness.sandbox"
 THREAD_LABEL: Final = "zharness.thread_id"
 POLICY_LABEL: Final = "zharness.policy"
 POLICY_VERSION: Final = 1
-DEFAULT_IMAGE: Final = "zharness-sandbox:latest"
-DEFAULT_MEMORY_LIMIT: Final = "512m"
-DEFAULT_NETWORK_ENABLED: Final = True
 
 logger = logging.getLogger(__name__)
 
@@ -34,44 +32,6 @@ class SandboxUnavailableError(RuntimeError):
 
 class SandboxConfigurationMismatchError(SandboxUnavailableError):
     """Signal that an owned container must be rebuilt. / 表示所属容器必须重建。"""
-
-
-@dataclass(frozen=True, slots=True)
-class DockerSandboxSettings:
-    image: str = DEFAULT_IMAGE
-    memory_limit: str = DEFAULT_MEMORY_LIMIT
-    nano_cpus: int = 1_000_000_000
-    pids_limit: int = 128
-    user: str | None = None
-    skills_root: str | None = None
-    network_enabled: bool = DEFAULT_NETWORK_ENABLED
-
-    @classmethod
-    def from_env(cls) -> DockerSandboxSettings:
-        return cls(
-            image=os.environ.get("ZHARNESS_SANDBOX_IMAGE", DEFAULT_IMAGE),
-            memory_limit=os.environ.get(
-                "ZHARNESS_SANDBOX_MEMORY", DEFAULT_MEMORY_LIMIT
-            ),
-            network_enabled=os.environ.get("ZHARNESS_SANDBOX_NETWORK", "true")
-            .strip()
-            .lower()
-            not in {"0", "false", "no"},
-            user=os.environ.get("ZHARNESS_SANDBOX_USER"),
-            skills_root=_env_skills_root(),
-        )
-
-
-def _env_skills_root() -> str | None:
-    """Resolve the configured skills directory for a sandbox mount, if any. / 解析沙箱挂载已配置的技能目录（如有）。"""
-    from zharness.skills.storage import skills_root_path
-
-    try:
-        root = skills_root_path()
-    except Exception:
-        logger.exception("Failed to resolve skills root for sandbox mount")
-        return None
-    return str(root) if root.is_dir() else None
 
 
 class DockerSandboxManager:
@@ -381,15 +341,16 @@ _manager_lock = threading.Lock()
 def get_sandbox_manager() -> DockerSandboxManager | object:
     """Return the sandbox manager for the configured provider.
 
-    ``ZHARNESS_SANDBOX_PROVIDER=local`` selects the local filesystem sandbox;
-    anything else selects the Docker sandbox.
+    ``sandbox.provider`` (``ZHARNESS_SANDBOX_PROVIDER``) set to ``local``
+    selects the local filesystem sandbox; anything else selects the Docker
+    sandbox.
 
-    ``ZHARNESS_SANDBOX_PROVIDER=local`` 选择本地文件系统沙箱；其他值选择 Docker 沙箱。
+    ``sandbox.provider``（``ZHARNESS_SANDBOX_PROVIDER``）为 ``local`` 时选择本地文件系统沙箱；其他值选择 Docker 沙箱。
     """
     global _manager
     with _manager_lock:
         if _manager is None:
-            provider = os.environ.get("ZHARNESS_SANDBOX_PROVIDER", "docker").lower()
+            provider = get_settings().sandbox.provider.lower()
             if provider == "local":
                 from zharness.sandbox.local import (
                     LocalSandboxManager,

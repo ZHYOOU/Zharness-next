@@ -9,8 +9,6 @@ PID_FILE="${RUNTIME_DIR}/server.pid"
 LOG_FILE="${RUNTIME_DIR}/server.log"
 ENV_FILE="${REPO_ROOT}/zharness/.env"
 COMPOSE_FILE="${REPO_ROOT}/docker-compose.yml"
-SERVER_HOST="${ZHARNESS_SERVER_HOST:-127.0.0.1}"
-SERVER_PORT="${ZHARNESS_SERVER_PORT:-2024}"
 
 is_running() {
     [[ -f "${PID_FILE}" ]] || return 1
@@ -19,23 +17,52 @@ is_running() {
     [[ "${pid}" =~ ^[0-9]+$ ]] && kill -0 "${pid}" 2>/dev/null
 }
 
-configured_sandbox_provider() {
+# Dump YAML-backed settings as KEY=VALUE lines, applying environment overrides
+# through the Python config module. / 以 KEY=VALUE 行形式导出 YAML 配置，环境变量覆盖由 Python 配置模块应用。
+config_values() {
     (
         cd "${REPO_ROOT}"
-        uv run --package zharness python -c \
-            'import os, sys; from dotenv import load_dotenv; load_dotenv(sys.argv[1], override=False); print(os.environ.get("ZHARNESS_SANDBOX_PROVIDER", "docker").lower())' \
-            "${ENV_FILE}"
+        uv run --package zharness python -c '
+from zharness.config import get_settings
+s = get_settings()
+lines = [
+    "ZHARNESS_SERVER_HOST=%s" % s.server.host,
+    "ZHARNESS_SERVER_PORT=%s" % s.server.port,
+    "ZHARNESS_SANDBOX_PROVIDER=%s" % s.sandbox.provider,
+    "ZHARNESS_POSTGRES_MANAGED=%s" % ("true" if s.postgres.managed else "false"),
+    "ZHARNESS_POSTGRES_USER=%s" % s.postgres.user,
+    "ZHARNESS_POSTGRES_DB=%s" % s.postgres.database,
+    "ZHARNESS_POSTGRES_PORT=%s" % s.postgres.port,
+    "LANGSMITH_TRACING=%s" % ("true" if s.langsmith.tracing else "false"),
+]
+if s.langsmith.project:
+    lines.append("LANGSMITH_PROJECT=%s" % s.langsmith.project)
+print("\n".join(lines))
+'
     )
 }
 
+_CONFIG_LOADED=0
+load_config() {
+    [[ "${_CONFIG_LOADED}" == "1" ]] && return 0
+    local line key value
+    while IFS= read -r line; do
+        [[ -z "${line}" ]] && continue
+        key="${line%%=*}"
+        value="${line#*=}"
+        export "${key}=${value}"
+    done < <(config_values)
+    _CONFIG_LOADED=1
+}
+
+configured_sandbox_provider() {
+    load_config
+    printf '%s\n' "${ZHARNESS_SANDBOX_PROVIDER:-docker}" | tr '[:upper:]' '[:lower:]'
+}
+
 managed_postgres_enabled() {
-    local configured
-    configured="$(
-        cd "${REPO_ROOT}"
-        uv run --package zharness python -c \
-            'import os, sys; from dotenv import load_dotenv; load_dotenv(sys.argv[1], override=False); print(os.environ.get("ZHARNESS_POSTGRES_MANAGED", "true").lower())' \
-            "${ENV_FILE}"
-    )"
+    load_config
+    local configured="${ZHARNESS_POSTGRES_MANAGED:-true}"
     [[ "${configured}" != "0" && "${configured}" != "false" && \
         "${configured}" != "no" && "${configured}" != "off" ]]
 }
@@ -117,8 +144,10 @@ check_start_requirements() {
         printf 'Missing %s; copy zharness/.env.example and configure it first.\n' "${ENV_FILE}" >&2
         return 1
     fi
-    if [[ ! "${SERVER_PORT}" =~ ^[0-9]+$ ]] || ((SERVER_PORT < 1 || SERVER_PORT > 65535)); then
-        printf 'Invalid ZHARNESS_SERVER_PORT: %s\n' "${SERVER_PORT}" >&2
+    load_config
+    local port="${ZHARNESS_SERVER_PORT:-2024}"
+    if [[ ! "${port}" =~ ^[0-9]+$ ]] || ((port < 1 || port > 65535)); then
+        printf 'Invalid ZHARNESS_SERVER_PORT: %s\n' "${port}" >&2
         return 1
     fi
     check_docker
@@ -132,6 +161,8 @@ dev_server() {
 
     rm -f "${PID_FILE}"
     check_start_requirements
+    SERVER_HOST="${ZHARNESS_SERVER_HOST:-127.0.0.1}"
+    SERVER_PORT="${ZHARNESS_SERVER_PORT:-2024}"
     start_postgres
     cd "${REPO_ROOT}"
     exec uv run langgraph dev --no-browser \
@@ -147,6 +178,8 @@ start_server() {
     fi
 
     rm -f "${PID_FILE}"
+    SERVER_HOST="${ZHARNESS_SERVER_HOST:-127.0.0.1}"
+    SERVER_PORT="${ZHARNESS_SERVER_PORT:-2024}"
 
     mkdir -p "${RUNTIME_DIR}"
     (

@@ -13,8 +13,11 @@ command execution.
 src/zharness/
 ├── agents/
 │   └── lead.py              # Lead Agent, tools, and middleware
+├── config/
+│   ├── loader.py            # YAML loading with environment overrides
+│   └── settings.py          # Typed configuration dataclasses
 ├── host/
-│   └── paths.py             # ZHARNESS_HOME and thread workspace resolution
+│   └── paths.py             # Data home and thread workspace resolution
 ├── models/
 │   └── factory.py           # Chat model factory
 ├── sandbox/
@@ -65,43 +68,82 @@ The agent also enables:
 - `TodoListMiddleware` for tracking multi-step tasks.
 - `SummarizationMiddleware`, which summarizes the context at 4,000 tokens while
   retaining the eight most recent messages.
-- `HumanInTheLoopMiddleware`, which interrupts the run for an explicit
-  approve/reject decision before `execute_command` executes.
+- `HumanInTheLoopMiddleware`, which supports per-run `allow_all` and
+  `require_approval` strategies for `execute_command`; `allow_all` is the
+  default.
 - `ToolErrorMiddleware`, which formats tool failures for the model to fix and
   retry.
 - `ToolRetryMiddleware`, which retries failed tool calls up to three times with
   bounded backoff.
 
+## Configuration
+
+### Approval strategy
+
+Shell approval is selected per run through `configurable.approval_strategy`.
+Omitting the value defaults to `allow_all`:
+
+```python
+config = {"configurable": {"approval_strategy": "allow_all"}}
+```
+
+Use `require_approval` to interrupt before each `execute_command` call and wait
+for an explicit approve/reject decision:
+
+```python
+config = {"configurable": {"approval_strategy": "require_approval"}}
+```
+
+Clients should include the selected value on every run for the thread. The
+strategy only controls human approval; sandbox, path, timeout, and output limits
+remain enforced in both modes.
+
+Non-secret settings live in `config.yaml` next to this package; secrets stay in
+the `.env` file that `langgraph.json` loads. `zharness.config.loader` resolves
+every value with the precedence: environment variable → YAML → built-in
+default. This keeps temporary overrides (such as `ZHARNESS_HOME`) working as
+environment variables while `config.yaml` remains the primary configuration
+surface.
+
 ## Model Configuration
 
-`server/graph.py` reads the model name from `ZHARNESS_MODEL`. The model factory
-(`zharness.models.factory`) creates a chat model for the provider selected by
-`ZHARNESS_MODEL_PROVIDER` — `deepseek`, `openai`, or `anthropic` — with a
+`server/graph.py` reads the model name from `model.name` in `config.yaml` (or
+`ZHARNESS_MODEL`). The model factory (`zharness.models.factory`) creates a chat
+model for the provider selected by `model.provider` (or
+`ZHARNESS_MODEL_PROVIDER`) — `deepseek`, `openai`, or `anthropic` — with a
 temperature of `0`, a 60-second request timeout, and up to three retries. When
 the provider is unset it is inferred from the model name: `claude*` uses
 Anthropic, `deepseek*` uses DeepSeek, and anything else uses OpenAI. API keys
 are read from `DEEPSEEK_API_KEY`, `OPENAI_API_KEY`, and `ANTHROPIC_API_KEY`
-respectively. `ZHARNESS_OPENAI_BASE_URL` overrides the endpoint for
-OpenAI-compatible services (Ollama, vLLM, etc.), and
-`ZHARNESS_ANTHROPIC_BASE_URL` overrides the Anthropic endpoint.
+respectively. `model.openai_base_url` (or `ZHARNESS_OPENAI_BASE_URL`) overrides
+the endpoint for OpenAI-compatible services (Ollama, vLLM, etc.), and
+`model.anthropic_base_url` overrides the Anthropic endpoint.
 
 Minimum configuration:
 
+```yaml
+# zharness/config.yaml
+model:
+  name: deepseek-chat
+```
+
 ```dotenv
-ZHARNESS_MODEL=deepseek-chat
+# zharness/.env (secrets only)
 DEEPSEEK_API_KEY=your-api-key
 ```
 
 Examples for other providers:
 
-```dotenv
-# OpenAI
-ZHARNESS_MODEL=gpt-4o
-OPENAI_API_KEY=your-api-key
+```yaml
+# zharness/config.yaml
+model:
+  name: gpt-4o
+  provider: openai
 
-# Anthropic
-ZHARNESS_MODEL=claude-sonnet-4-5
-ANTHROPIC_API_KEY=your-api-key
+# or / 或
+model:
+  name: claude-sonnet-4-5
+  provider: anthropic
 ```
 
 ## Thread Workspaces
@@ -109,12 +151,13 @@ ANTHROPIC_API_KEY=your-api-key
 Each LangGraph thread maps to a server-owned directory:
 
 ```text
-${ZHARNESS_HOME}/workspaces/<thread_id>/
+<home>/workspaces/<thread_id>/
 ```
 
-If `ZHARNESS_HOME` is unset, the default is `.zharness` under the current
-working directory. Thread IDs may contain letters, digits, underscores, and
-hyphens, with a maximum length of 128 characters.
+`<home>` is the `home` key in `config.yaml` (or `ZHARNESS_HOME`); when unset the
+default is `.zharness` under the current working directory. Thread IDs may
+contain letters, digits, underscores, and hyphens, with a maximum length of 128
+characters.
 
 Paths exposed to the agent are virtual paths beginning at `/`. For example,
 `/src/main.py` maps to `/workspace/src/main.py` inside the current thread's
@@ -133,10 +176,10 @@ followed by `os.replace` to avoid leaving a partially written destination.
 The agent discovers reusable `SKILL.md` packages from a skills directory.
 `LocalSkillStorage` resolves it in this order:
 
-1. `ZHARNESS_SKILLS_PATH`, when set;
-2. `<ZHARNESS_HOME>/skills`, when it exists;
+1. `ZHARNESS_SKILLS_PATH` or the `skills.path` YAML key, when set;
+2. `<home>/skills`, when it exists;
 3. the checked-in repository `skills/` directory;
-4. `<ZHARNESS_HOME>/skills` otherwise.
+4. `<home>/skills` otherwise.
 
 Skills live in category subdirectories, `public/` (read-only, bundled) and
 `user/` (editable):
@@ -165,7 +208,7 @@ sandbox is constrained as follows:
 
 - read-only root filesystem;
 - network access through Docker's default bridge (disable with
-  `ZHARNESS_SANDBOX_NETWORK=0`);
+  `sandbox.docker.network_enabled: false` or `ZHARNESS_SANDBOX_NETWORK=0`);
 - all Linux capabilities dropped;
 - `no-new-privileges` enabled;
 - a `tmpfs` at `/tmp` with `nosuid`, `nodev`, and `noexec`;
@@ -188,23 +231,23 @@ container recreation.
 
 For single-user, trusted local deployments the file tools can run directly on
 the host filesystem instead of inside Docker. Select the local provider with
-`ZHARNESS_SANDBOX_PROVIDER=local`. Each thread then reads and writes a local
-directory through the same virtual `/` path space and path-safety checks as the
-Docker backend.
+`sandbox.provider: local` in `config.yaml` (or `ZHARNESS_SANDBOX_PROVIDER=local`).
+Each thread then reads and writes a local directory through the same virtual `/`
+path space and path-safety checks as the Docker backend.
 
-Sandbox environment variables:
+Sandbox configuration keys:
 
-| Variable | Default | Description |
+| Key | Default | Description |
 | --- | --- | --- |
-| `ZHARNESS_SANDBOX_PROVIDER` | `docker` | Sandbox backend: `docker` or `local` |
-| `ZHARNESS_SANDBOX_IMAGE` | `zharness-sandbox:latest` | Docker image name |
-| `ZHARNESS_SANDBOX_MEMORY` | `512m` | Container memory limit |
-| `ZHARNESS_SANDBOX_NETWORK` | Enabled | Docker sandbox network access; set to `0`/`false`/`no` to disable |
-| `ZHARNESS_SANDBOX_USER` | Server process UID/GID | Container user, for example `1000:1000` |
-| `ZHARNESS_HOME` | `./.zharness` | Parent directory for thread workspaces |
-| `ZHARNESS_LOCAL_ROOT` | None | Local sandbox root shared by every thread (otherwise each thread gets `ZHARNESS_HOME/workspaces/<thread_id>`) |
-| `ZHARNESS_ALLOW_HOST_BASH` | Disabled | Enable host bash execution in the local sandbox (`1`/`true`/`yes`) |
-| `ZHARNESS_SKILLS_PATH` | Resolved skills root | Override the directory that contains installed `SKILL.md` packages |
+| `sandbox.provider` | `docker` | Sandbox backend: `docker` or `local` |
+| `sandbox.docker.image` | `zharness-sandbox:latest` | Docker image name |
+| `sandbox.docker.memory_limit` | `512m` | Container memory limit |
+| `sandbox.docker.network_enabled` | `true` | Docker sandbox network access |
+| `sandbox.docker.user` | Server process UID/GID | Container user, for example `1000:1000` |
+| `home` | `./.zharness` | Parent directory for thread workspaces |
+| `sandbox.local.root` | None | Local sandbox root shared by every thread (otherwise each thread gets `<home>/workspaces/<thread_id>`) |
+| `sandbox.local.allow_host_bash` | `false` | Enable host bash execution in the local sandbox |
+| `skills.path` | Resolved skills root | Override the directory that contains installed `SKILL.md` packages |
 
 Commands are limited to 128 KiB of text and a timeout between 1 and 300 seconds.
 Retained output is limited to 1 MiB by default. Docker sandbox file uploads and

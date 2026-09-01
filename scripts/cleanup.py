@@ -20,8 +20,9 @@ import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
+from zharness.config import get_settings
 from zharness.host.paths import zharness_home
-from zharness.sandbox.manager import DEFAULT_IMAGE, SANDBOX_LABEL
+from zharness.sandbox.manager import SANDBOX_LABEL
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ENV_FILE = REPO_ROOT / "zharness" / ".env"
@@ -218,7 +219,7 @@ def main(argv: list[str] | None = None) -> int:
             if want["sandboxes"]:
                 remove_sandboxes(client, dry_run=args.dry_run)
             if args.remove_image:
-                image = os.environ.get("ZHARNESS_SANDBOX_IMAGE", DEFAULT_IMAGE)
+                image = get_settings().sandbox.docker.image
                 remove_image(client, image, dry_run=args.dry_run)
     if args.caches:
         remove_caches(REPO_ROOT, dry_run=args.dry_run)
