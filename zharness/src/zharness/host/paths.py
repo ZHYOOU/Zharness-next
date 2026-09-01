@@ -1,9 +1,11 @@
 import os
 import re
 from pathlib import Path
+from typing import Final
 
 ZHARNESS_HOME_ENV = "ZHARNESS_HOME"
-_THREAD_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}")
+THREAD_ID_PATTERN: Final = r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}"
+_THREAD_ID_PATTERN = re.compile(THREAD_ID_PATTERN)
 
 
 class WorkspacePathError(ValueError):

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import threading
@@ -10,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any, Final
 
 from docker.errors import APIError, DockerException, NotFound
+from docker.utils import parse_bytes
 
 import docker
 from zharness.host.paths import ensure_thread_workspace, thread_workspace_path
@@ -17,6 +19,8 @@ from zharness.sandbox.docker import DockerSandbox
 
 SANDBOX_LABEL: Final = "zharness.sandbox"
 THREAD_LABEL: Final = "zharness.thread_id"
+POLICY_LABEL: Final = "zharness.policy"
+POLICY_VERSION: Final = 1
 DEFAULT_IMAGE: Final = "zharness-sandbox:latest"
 DEFAULT_MEMORY_LIMIT: Final = "512m"
 DEFAULT_NETWORK_ENABLED: Final = True
@@ -26,6 +30,10 @@ logger = logging.getLogger(__name__)
 
 class SandboxUnavailableError(RuntimeError):
     """Raised when a thread sandbox cannot be provisioned."""
+
+
+class SandboxConfigurationMismatchError(SandboxUnavailableError):
+    """Signal that an owned container must be rebuilt. / 表示所属容器必须重建。"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,19 +106,52 @@ class DockerSandboxManager:
     def for_thread(self, thread_id: str) -> DockerSandbox:
         workspace = ensure_thread_workspace(thread_id)
         name = self.container_name(thread_id)
+        try:
+            image_id = str(self.client.images.get(self.settings.image).id)
+        except DockerException as exc:
+            raise SandboxUnavailableError(
+                f"Could not resolve Docker sandbox image: {exc}"
+            ) from exc
+        policy = self._policy_fingerprint(image_id)
         with self._lock:
             try:
                 container = self.client.containers.get(name)
-                self._validate_container(container, thread_id, str(workspace))
+                self._validate_container(
+                    container,
+                    thread_id,
+                    str(workspace),
+                    image_id=image_id,
+                    policy=policy,
+                )
                 container.reload()
                 if container.status != "running":
                     container.start()
             except NotFound:
                 try:
-                    container = self._create_container(name, thread_id, str(workspace))
+                    container = self._create_container(
+                        name,
+                        thread_id,
+                        str(workspace),
+                        image_id=image_id,
+                        policy=policy,
+                    )
                 except DockerException as exc:
                     raise SandboxUnavailableError(
                         f"Could not create Docker sandbox: {exc}"
+                    ) from exc
+            except SandboxConfigurationMismatchError:
+                try:
+                    container.remove(force=True)
+                    container = self._create_container(
+                        name,
+                        thread_id,
+                        str(workspace),
+                        image_id=image_id,
+                        policy=policy,
+                    )
+                except DockerException as exc:
+                    raise SandboxUnavailableError(
+                        f"Could not rebuild Docker sandbox: {exc}"
                     ) from exc
             except DockerException as exc:
                 raise SandboxUnavailableError(
@@ -118,10 +159,39 @@ class DockerSandboxManager:
                 ) from exc
         return DockerSandbox(container)
 
-    def _create_container(self, name: str, thread_id: str, workspace: str) -> Any:
-        user = self.settings.user
-        if user is None and hasattr(os, "getuid"):
-            user = f"{os.getuid()}:{os.getgid()}"
+    def _effective_user(self) -> str | None:
+        """Resolve the configured container identity. / 解析配置的容器身份。"""
+        if self.settings.user is not None:
+            return self.settings.user
+        if hasattr(os, "getuid"):
+            return f"{os.getuid()}:{os.getgid()}"
+        return None
+
+    def _policy_fingerprint(self, image_id: str) -> str:
+        """Hash every setting that affects sandbox isolation. / 对影响沙箱隔离的全部设置计算哈希。"""
+        policy = {
+            "version": POLICY_VERSION,
+            "image_id": image_id,
+            "memory_limit": self.settings.memory_limit,
+            "nano_cpus": self.settings.nano_cpus,
+            "pids_limit": self.settings.pids_limit,
+            "user": self._effective_user(),
+            "skills_root": self.settings.skills_root,
+            "network_enabled": self.settings.network_enabled,
+        }
+        encoded = json.dumps(policy, sort_keys=True, separators=(",", ":")).encode()
+        return hashlib.sha256(encoded).hexdigest()
+
+    def _create_container(
+        self,
+        name: str,
+        thread_id: str,
+        workspace: str,
+        *,
+        image_id: str,
+        policy: str,
+    ) -> Any:
+        user = self._effective_user()
 
         volumes: dict[str, dict[str, str]] = {
             workspace: {"bind": "/workspace", "mode": "rw"}
@@ -149,7 +219,11 @@ class DockerSandboxManager:
             "nano_cpus": self.settings.nano_cpus,
             "pids_limit": self.settings.pids_limit,
             "init": True,
-            "labels": {SANDBOX_LABEL: "true", THREAD_LABEL: thread_id},
+            "labels": {
+                SANDBOX_LABEL: "true",
+                THREAD_LABEL: thread_id,
+                POLICY_LABEL: policy,
+            },
         }
         if user:
             options["user"] = user
@@ -159,7 +233,13 @@ class DockerSandboxManager:
             if exc.status_code != 409:
                 raise
             container = self.client.containers.get(name)
-            self._validate_container(container, thread_id, workspace)
+            self._validate_container(
+                container,
+                thread_id,
+                workspace,
+                image_id=image_id,
+                policy=policy,
+            )
             return container
 
     def remove_for_thread(self, thread_id: str) -> bool:
@@ -176,7 +256,7 @@ class DockerSandboxManager:
                 raise SandboxUnavailableError(
                     f"Could not inspect Docker sandbox: {exc}"
                 ) from exc
-            self._validate_container(container, thread_id, workspace)
+            self._validate_ownership(container, thread_id, workspace)
             try:
                 container.remove(force=True)
             except DockerException as exc:
@@ -217,12 +297,11 @@ class DockerSandboxManager:
                     )
             return stopped
 
-    def _validate_container(
-        self, container: Any, thread_id: str, workspace: str
-    ) -> None:
+    @staticmethod
+    def _validate_ownership(container: Any, thread_id: str, workspace: str) -> None:
+        """Validate ownership before mutating an existing container. / 在修改现有容器前验证其归属。"""
         attrs = container.attrs
         config = attrs.get("Config", {})
-        host_config = attrs.get("HostConfig", {})
         labels = config.get("Labels", {}) or {}
         if labels.get(SANDBOX_LABEL) != "true" or labels.get(THREAD_LABEL) != thread_id:
             raise SandboxUnavailableError(
@@ -241,16 +320,56 @@ class DockerSandboxManager:
                 "Existing sandbox has an unexpected workspace mount"
             )
 
+    def _validate_container(
+        self,
+        container: Any,
+        thread_id: str,
+        workspace: str,
+        *,
+        image_id: str,
+        policy: str,
+    ) -> None:
+        self._validate_ownership(container, thread_id, workspace)
+
+        attrs = container.attrs
+        config = attrs.get("Config", {})
+        host_config = attrs.get("HostConfig", {})
+        labels = config.get("Labels", {}) or {}
+        mounts = attrs.get("Mounts", [])
+
         security_options = host_config.get("SecurityOpt", []) or []
         expected_network_mode = "bridge" if self.settings.network_enabled else "none"
+        expected_user = self._effective_user() or ""
+        expected_memory = parse_bytes(self.settings.memory_limit)
+        skills_mounts = [
+            mount for mount in mounts if mount.get("Destination") == "/mnt/skills"
+        ]
+        valid_skills_mount = (
+            not skills_mounts
+            if self.settings.skills_root is None
+            else len(skills_mounts) == 1
+            and os.path.realpath(skills_mounts[0].get("Source", ""))
+            == os.path.realpath(self.settings.skills_root)
+            and skills_mounts[0].get("RW") is False
+        )
         hardened = (
-            host_config.get("ReadonlyRootfs") is True
+            labels.get(POLICY_LABEL) == policy
+            and attrs.get("Image") == image_id
+            and config.get("User", "") == expected_user
+            and host_config.get("ReadonlyRootfs") is True
             and host_config.get("NetworkMode") == expected_network_mode
             and set(host_config.get("CapDrop", []) or []) == {"ALL"}
             and any("no-new-privileges" in option for option in security_options)
+            and host_config.get("Memory") == expected_memory
+            and host_config.get("NanoCpus") == self.settings.nano_cpus
+            and host_config.get("PidsLimit") == self.settings.pids_limit
+            and host_config.get("Init") is True
+            and host_config.get("Tmpfs", {}).get("/tmp")
+            == "rw,nosuid,nodev,noexec,size=64m"
+            and valid_skills_mount
         )
         if not hardened:
-            raise SandboxUnavailableError(
+            raise SandboxConfigurationMismatchError(
                 "Existing sandbox does not match the required security policy"
             )
 

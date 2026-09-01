@@ -114,16 +114,15 @@ ZHARNESS_MODEL=deepseek-chat
 ZHARNESS_MODEL_PROVIDER=deepseek
 DEEPSEEK_API_KEY=your-api-key
 ZHARNESS_HOME=/absolute/path/to/zharness-data
-ZHARNESS_POSTGRES_URI=postgresql://zharness:change-me@127.0.0.1:5432/zharness
 LANGGRAPH_STRICT_MSGPACK=true
 ```
 
-`ZHARNESS_POSTGRES_URI` is used by the server-wide
-`AsyncPostgresSaver`. At startup, the server applies the idempotent checkpoint
-migrations and keeps the connection open until shutdown. `make start` and
-`make dev` automatically start the PostgreSQL service defined in
+The server-wide `AsyncPostgresSaver` derives its connection URI from the managed
+Compose settings below. At startup, the server applies the idempotent checkpoint
+migrations and keeps the connection open until shutdown. `make start` and `make
+dev` automatically start the PostgreSQL service defined in
 `docker-compose.yml` and wait for its health check before starting LangGraph.
-The default Compose credentials match the URI above and can be configured with:
+The default Compose credentials can be configured with:
 
 ```dotenv
 ZHARNESS_POSTGRES_MANAGED=true
@@ -133,9 +132,9 @@ ZHARNESS_POSTGRES_DB=zharness
 ZHARNESS_POSTGRES_PORT=5432
 ```
 
-Keep these values consistent with `ZHARNESS_POSTGRES_URI`, or omit the URI to
-derive it from the managed Compose settings. Set `ZHARNESS_POSTGRES_MANAGED=false`
-when using an externally managed database; an explicit URI is required then.
+Set `ZHARNESS_POSTGRES_MANAGED=false` when using an externally managed database;
+an explicit `ZHARNESS_POSTGRES_URI` is required then and overrides all managed
+connection settings.
 `make stop` stops the Compose container but retains its named volume. The
 database can also be managed independently with `make postgres-start`,
 `make postgres-stop`, and `make postgres-logs`.

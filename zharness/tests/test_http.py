@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 from starlette.types import Message, Receive, Scope, Send
+from zharness.host.paths import WorkspacePathError
 from zharness.server import http as http_module
 from zharness.server.http import ThreadSandboxCleanupMiddleware, lifespan
 
@@ -72,6 +73,7 @@ async def test_successful_thread_delete_removes_sandbox(monkeypatch) -> None:
     [
         (_scope(method="GET"), 204),
         (_scope(path="/threads/thread-one/state"), 204),
+        (_scope(path="/threads/_invalid"), 204),
         (_scope(), 404),
         ({"type": "lifespan", "asgi": {"version": "3.0"}, "state": {}}, None),
     ],
@@ -97,6 +99,38 @@ async def test_other_requests_do_not_remove_sandbox(
 
     assert called.value is True
     assert manager.removed == []
+
+
+@pytest.mark.asyncio
+async def test_cleanup_path_error_does_not_break_delete_response(monkeypatch) -> None:
+    class InvalidWorkspaceManager(FakeManager):
+        def remove_for_thread(self, thread_id: str) -> bool:
+            raise WorkspacePathError("invalid workspace")
+
+    monkeypatch.setattr(
+        http_module,
+        "get_sandbox_manager",
+        lambda: InvalidWorkspaceManager(),
+    )
+
+    async def run_immediately(function, *args):
+        return function(*args)
+
+    monkeypatch.setattr(http_module.asyncio, "to_thread", run_immediately)
+
+    async def app(scope: Scope, receive: Receive, send: Send) -> None:
+        await send({"type": "http.response.start", "status": 204, "headers": []})
+        await send({"type": "http.response.body", "body": b""})
+
+    messages: list[Message] = []
+    middleware = ThreadSandboxCleanupMiddleware(app)
+
+    async def send(message: Message) -> None:
+        messages.append(message)
+
+    await middleware(_scope(), _receive, send)
+
+    assert messages[0]["status"] == 204
 
 
 @pytest.mark.asyncio

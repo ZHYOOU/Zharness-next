@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from starlette.applications import Starlette
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from zharness.host.paths import THREAD_ID_PATTERN, WorkspacePathError
 from zharness.sandbox.manager import (
     SandboxUnavailableError,
     get_sandbox_manager,
@@ -14,7 +15,7 @@ from zharness.sandbox.manager import (
 
 logger = logging.getLogger(__name__)
 
-_THREAD_DELETE_PATH = re.compile(r"(?:^|/)threads/(?P<thread_id>[A-Za-z0-9_-]+)$")
+_THREAD_DELETE_PATH = re.compile(rf"(?:^|/)threads/(?P<thread_id>{THREAD_ID_PATTERN})$")
 
 
 class ThreadSandboxCleanupMiddleware:
@@ -45,7 +46,7 @@ class ThreadSandboxCleanupMiddleware:
                         get_sandbox_manager().remove_for_thread,
                         thread_id,
                     )
-                except SandboxUnavailableError:
+                except (SandboxUnavailableError, WorkspacePathError):
                     logger.exception(
                         "Failed to remove sandbox for deleted thread %s",
                         thread_id,
@@ -57,7 +58,7 @@ class ThreadSandboxCleanupMiddleware:
 
 @asynccontextmanager
 async def lifespan(_: Starlette) -> AsyncIterator[None]:
-    """Stop all running sandboxes during a graceful server shutdown."""
+    """Stop sandboxes during graceful shutdown. / 在优雅关闭期间停止全部沙箱。"""
 
     try:
         yield

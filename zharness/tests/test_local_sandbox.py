@@ -226,6 +226,15 @@ def test_execute_runs_when_enabled(root: Path) -> None:
     assert result.output == "hello from host"
 
 
+def test_execute_discards_output_beyond_memory_cap(root: Path) -> None:
+    sandbox = LocalSandbox(root, allow_host_bash=True, max_output_bytes=1024)
+
+    result = sandbox.execute("head -c 1048576 /dev/zero")
+
+    assert len(result.output) == 1024
+    assert result.truncated is True
+
+
 def test_execute_times_out(root: Path) -> None:
     sandbox = LocalSandbox(root, allow_host_bash=True)
     result = sandbox.execute("sleep 5", timeout=1)

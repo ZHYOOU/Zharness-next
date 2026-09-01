@@ -80,14 +80,13 @@ ZHARNESS_MODEL=deepseek-chat
 ZHARNESS_MODEL_PROVIDER=deepseek
 DEEPSEEK_API_KEY=your-api-key
 ZHARNESS_HOME=/absolute/path/to/zharness-data
-ZHARNESS_POSTGRES_URI=postgresql://zharness:change-me@127.0.0.1:5432/zharness
 LANGGRAPH_STRICT_MSGPACK=true
 ```
 
-服务通过 `ZHARNESS_POSTGRES_URI` 创建全局 `AsyncPostgresSaver`。服务启动时会执行
-幂等的检查点表迁移，并保持数据库连接直到服务关闭。`make start` 和 `make dev` 会自动
-启动 `docker-compose.yml` 中的 PostgreSQL，并等待健康检查通过后再启动 LangGraph。
-Compose 默认账号与上面的 URI 一致，可以通过以下变量配置：
+全局 `AsyncPostgresSaver` 默认根据下方的托管 Compose 配置生成连接 URI。服务启动时会
+执行幂等的检查点表迁移，并保持数据库连接直到服务关闭。`make start` 和 `make dev` 会
+自动启动 `docker-compose.yml` 中的 PostgreSQL，并等待健康检查通过后再启动 LangGraph。
+Compose 默认账号可以通过以下变量配置：
 
 ```dotenv
 ZHARNESS_POSTGRES_MANAGED=true
@@ -97,9 +96,9 @@ ZHARNESS_POSTGRES_DB=zharness
 ZHARNESS_POSTGRES_PORT=5432
 ```
 
-这些变量需要与 `ZHARNESS_POSTGRES_URI` 保持一致；也可以省略 URI，让程序根据托管
-Compose 配置自动生成。使用外部 PostgreSQL 时设置 `ZHARNESS_POSTGRES_MANAGED=false`，
-此时必须提供显式 URI。`make stop` 会停止 Compose 容器，但保留数据库命名卷。也可以
+使用外部 PostgreSQL 时设置 `ZHARNESS_POSTGRES_MANAGED=false`，此时必须提供显式
+`ZHARNESS_POSTGRES_URI`；该 URI 会覆盖全部托管连接设置。`make stop` 会停止 Compose
+容器，但保留数据库命名卷。也可以
 使用 `make postgres-start`、`make postgres-stop` 和
 `make postgres-logs` 单独管理数据库。
 

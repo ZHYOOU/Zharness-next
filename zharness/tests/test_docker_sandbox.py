@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from docker.errors import APIError, NotFound
 from zharness.sandbox.docker import DockerSandbox
 from zharness.sandbox.manager import (
+    POLICY_LABEL,
     SANDBOX_LABEL,
     THREAD_LABEL,
     DockerSandboxManager,
@@ -35,11 +36,25 @@ class FakeAPI:
 
 
 class FakeContainer:
-    def __init__(self, api: FakeAPI | None = None) -> None:
+    def __init__(
+        self, api: FakeAPI | None = None, *, attrs: dict | None = None
+    ) -> None:
         self.id = "container-one"
         self.client = SimpleNamespace(api=api or FakeAPI())
         self.archives: list[tuple[str, bytes]] = []
-        self.attrs = {"Config": {"User": "1000:1000"}}
+        self.attrs = attrs or {"Config": {"User": "1000:1000"}}
+        self.status = "running"
+        self.removed = False
+
+    def reload(self) -> None:
+        pass
+
+    def start(self) -> None:
+        self.status = "running"
+
+    def remove(self, *, force: bool) -> None:
+        assert force is True
+        self.removed = True
 
     def put_archive(self, path: str, data: bytes) -> bool:
         self.archives.append((path, data))
@@ -174,13 +189,57 @@ class FakeContainers:
         return self.container
 
 
+class FakeImages:
+    def __init__(self, image_id: str = "sha256:image-one") -> None:
+        self.image_id = image_id
+
+    def get(self, image: str):
+        assert image == "zharness-sandbox:latest"
+        return SimpleNamespace(id=self.image_id)
+
+
+def _fake_client(containers: FakeContainers):
+    return SimpleNamespace(containers=containers, images=FakeImages())
+
+
+def _valid_container_attrs(
+    manager: DockerSandboxManager,
+    workspace: str,
+    *,
+    image_id: str = "sha256:image-one",
+) -> dict:
+    return {
+        "Image": image_id,
+        "Config": {
+            "Labels": {
+                SANDBOX_LABEL: "true",
+                THREAD_LABEL: "thread-one",
+                POLICY_LABEL: manager._policy_fingerprint(image_id),
+            },
+            "User": "1000:1000",
+        },
+        "HostConfig": {
+            "ReadonlyRootfs": True,
+            "NetworkMode": "bridge",
+            "CapDrop": ["ALL"],
+            "SecurityOpt": ["no-new-privileges"],
+            "Memory": 512 * 1024 * 1024,
+            "NanoCpus": 1_000_000_000,
+            "PidsLimit": 128,
+            "Init": True,
+            "Tmpfs": {"/tmp": "rw,nosuid,nodev,noexec,size=64m"},
+        },
+        "Mounts": [{"Destination": "/workspace", "Source": workspace, "RW": True}],
+    }
+
+
 def test_manager_creates_hardened_thread_container(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("ZHARNESS_HOME", str(tmp_path))
     skills = tmp_path / "skills"
     skills.mkdir()
     monkeypatch.setenv("ZHARNESS_SKILLS_PATH", str(skills))
     containers = FakeContainers()
-    client = SimpleNamespace(containers=containers)
+    client = _fake_client(containers)
     settings = DockerSandboxSettings(user="1000:1000", skills_root=str(skills))
     manager = DockerSandboxManager(client=client, settings=settings)
 
@@ -202,6 +261,7 @@ def test_manager_creates_hardened_thread_container(tmp_path: Path, monkeypatch) 
     assert options["labels"] == {
         SANDBOX_LABEL: "true",
         THREAD_LABEL: "thread-one",
+        POLICY_LABEL: manager._policy_fingerprint("sha256:image-one"),
     }
 
 
@@ -218,7 +278,7 @@ def test_network_can_be_disabled(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("ZHARNESS_SANDBOX_NETWORK", "false")
     containers = FakeContainers()
     manager = DockerSandboxManager(
-        client=SimpleNamespace(containers=containers),
+        client=_fake_client(containers),
         settings=DockerSandboxSettings.from_env(),
     )
 
@@ -235,7 +295,7 @@ def test_manager_creates_container_without_skills_mount(
     monkeypatch.setenv("ZHARNESS_SKILLS_PATH", str(tmp_path / "missing-skills"))
     containers = FakeContainers()
     manager = DockerSandboxManager(
-        client=SimpleNamespace(containers=containers),
+        client=_fake_client(containers),
         settings=DockerSandboxSettings(user="1000:1000", skills_root=None),
     )
 
@@ -248,6 +308,52 @@ def test_manager_creates_container_without_skills_mount(
             "mode": "rw",
         }
     }
+
+
+def test_manager_rebuilds_container_with_stale_security_policy(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("ZHARNESS_HOME", str(tmp_path))
+    workspace = str(tmp_path / "workspaces" / "thread-one")
+    manager = DockerSandboxManager(
+        client=SimpleNamespace(),
+        settings=DockerSandboxSettings(user="1000:1000"),
+    )
+    stale = FakeContainer(
+        attrs=_valid_container_attrs(
+            manager,
+            workspace,
+            image_id="sha256:old-image",
+        )
+    )
+    containers = FakeContainers(stale)
+    manager._client = _fake_client(containers)
+
+    rebuilt = manager.for_thread("thread-one")
+
+    assert stale.removed is True
+    assert rebuilt is not stale
+    assert containers.run_options is not None
+
+
+def test_manager_reuses_container_with_current_security_policy(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("ZHARNESS_HOME", str(tmp_path))
+    workspace = str(tmp_path / "workspaces" / "thread-one")
+    manager = DockerSandboxManager(
+        client=SimpleNamespace(),
+        settings=DockerSandboxSettings(user="1000:1000"),
+    )
+    current = FakeContainer(attrs=_valid_container_attrs(manager, workspace))
+    containers = FakeContainers(current)
+    manager._client = _fake_client(containers)
+
+    reused = manager.for_thread("thread-one")
+
+    assert reused.container is current
+    assert current.removed is False
+    assert containers.run_options is None
 
 
 class StoppingContainer:

@@ -23,6 +23,8 @@ import stat
 import subprocess
 import tempfile
 import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
@@ -217,13 +219,18 @@ class LocalSandbox(SandboxBackendProtocol):
             raise LocalSandboxError(f"Not a regular file: {path}")
         return target
 
-    def _host_command(self, command: str) -> str:
+    def _host_command(
+        self,
+        command: str,
+        *,
+        skills_root: Path | None = None,
+    ) -> str:
         """Map the advertised skills mount to its host path for local execution. / 为本地执行将对外提供的技能挂载路径映射到其主机路径。"""
-        if self.skills_root is None:
+        if skills_root is None:
             return command
 
         mount = str(SKILLS_SANDBOX_ROOT)
-        host = str(self.skills_root)
+        host = str(skills_root)
         mapped: list[str] = []
         quote: str | None = None
         escaped = False
@@ -267,6 +274,22 @@ class LocalSandbox(SandboxBackendProtocol):
             mapped.append(char)
             index += 1
         return "".join(mapped)
+
+    @contextmanager
+    def _command_skills_snapshot(self) -> Iterator[Path | None]:
+        """Expose disposable skill copies to host commands. / 向主机命令公开一次性的技能副本。"""
+        if self.skills_root is None:
+            yield None
+            return
+
+        def ignore_symlinks(directory: str, names: list[str]) -> list[str]:
+            """Exclude links so a snapshot cannot point back to host data. / 排除链接，避免快照重新指向主机数据。"""
+            return [name for name in names if (Path(directory) / name).is_symlink()]
+
+        with tempfile.TemporaryDirectory(prefix="zharness-skills-") as temp_dir:
+            snapshot = Path(temp_dir) / "skills"
+            shutil.copytree(self.skills_root, snapshot, ignore=ignore_symlinks)
+            yield snapshot
 
     # ------------------------------------------------------------------
     # SandboxBackendProtocol operations
@@ -712,40 +735,74 @@ class LocalSandbox(SandboxBackendProtocol):
                 output="Error: timeout must be a non-negative integer", exit_code=2
             )
 
+        output = bytearray()
+        truncated = False
+        reader_errors: list[OSError] = []
+
         try:
-            proc = subprocess.Popen(
-                ["/bin/sh", "-lc", self._host_command(command)],
-                cwd=self.root,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                start_new_session=True,
-            )
-            with self._process_lock:
-                self._processes.add(proc)
-            try:
-                output, _ = proc.communicate(
-                    timeout=(timeout if timeout else DEFAULT_EXECUTE_TIMEOUT)
+            with self._command_skills_snapshot() as skills_snapshot:
+                proc = subprocess.Popen(
+                    [
+                        "/bin/sh",
+                        "-lc",
+                        self._host_command(command, skills_root=skills_snapshot),
+                    ],
+                    cwd=self.root,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
                 )
-            except subprocess.TimeoutExpired:
-                self._terminate_process_group(proc)
-                proc.communicate()
-                return ExecuteResponse(
-                    output="Command timed out", exit_code=124, truncated=True
-                )
-            finally:
                 with self._process_lock:
-                    self._processes.discard(proc)
-        except subprocess.TimeoutExpired:
-            return ExecuteResponse(
-                output="Command timed out", exit_code=124, truncated=True
-            )
+                    self._processes.add(proc)
+
+                def drain_output() -> None:
+                    """Retain only the configured prefix while draining stdout. / 排空标准输出，同时仅保留配置的前缀。"""
+                    nonlocal truncated
+                    assert proc.stdout is not None
+                    try:
+                        while chunk := proc.stdout.read(64 * 1024):
+                            remaining = self.max_output_bytes - len(output)
+                            if remaining > 0:
+                                output.extend(chunk[:remaining])
+                            if len(chunk) > remaining:
+                                truncated = True
+                    except OSError as exc:
+                        reader_errors.append(exc)
+
+                reader = threading.Thread(target=drain_output, daemon=True)
+                reader.start()
+                timed_out = False
+                try:
+                    proc.wait(timeout=(timeout if timeout else DEFAULT_EXECUTE_TIMEOUT))
+                except subprocess.TimeoutExpired:
+                    timed_out = True
+                    self._terminate_process_group(proc)
+                    proc.wait()
+                finally:
+                    reader.join(timeout=1)
+                    if reader.is_alive():
+                        # A descendant inherited stdout after the shell exited. / shell 退出后仍有子进程继承了标准输出。
+                        self._terminate_process_group(proc)
+                        reader.join(timeout=1)
+                    if reader.is_alive() and proc.stdout is not None:
+                        proc.stdout.close()
+                        reader.join()
+                    with self._process_lock:
+                        self._processes.discard(proc)
+
+                if timed_out:
+                    return ExecuteResponse(
+                        output="Command timed out", exit_code=124, truncated=True
+                    )
         except OSError as exc:
             return ExecuteResponse(output=f"Local execution failed: {exc}", exit_code=1)
 
-        retained_output = output[: self.max_output_bytes]
-        truncated = len(output) > self.max_output_bytes
+        if reader_errors:
+            return ExecuteResponse(
+                output=f"Local execution failed: {reader_errors[0]}", exit_code=1
+            )
         return ExecuteResponse(
-            output=retained_output.decode("utf-8", errors="replace"),
+            output=bytes(output).decode("utf-8", errors="replace"),
             exit_code=proc.returncode,
             truncated=truncated,
         )
@@ -753,8 +810,6 @@ class LocalSandbox(SandboxBackendProtocol):
     @staticmethod
     def _terminate_process_group(proc: subprocess.Popen[bytes]) -> None:
         """Kill a command and every descendant that remains in its process group."""
-        if proc.poll() is not None:
-            return
         try:
             os.killpg(proc.pid, signal.SIGKILL)
         except ProcessLookupError:

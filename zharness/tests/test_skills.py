@@ -502,3 +502,19 @@ def test_local_execute_maps_advertised_skills_path(tmp_path: Path, quote: str) -
 
     assert skill_file.is_file()
     assert result.exit_code == 0
+
+
+def test_local_execute_cannot_modify_host_skills(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    skills = tmp_path / "skills"
+    skill_file = _write_skill(skills, "public", "data-analysis")
+    original = skill_file.read_text(encoding="utf-8")
+    sandbox = LocalSandbox(workspace, allow_host_bash=True, skills_root=skills)
+
+    result = sandbox.execute(
+        f"printf pwned > {DEFAULT_SKILLS_CONTAINER_PATH}/public/data-analysis/{SKILL_MD_FILE}"
+    )
+
+    assert result.exit_code == 0
+    assert skill_file.read_text(encoding="utf-8") == original
