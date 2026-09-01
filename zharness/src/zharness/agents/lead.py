@@ -3,6 +3,8 @@ from langchain.agents.middleware import (
     HumanInTheLoopMiddleware,
     SummarizationMiddleware,
     TodoListMiddleware,
+    ToolErrorMiddleware,
+    ToolRetryMiddleware,
 )
 from langchain_core.language_models import BaseChatModel
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -22,6 +24,15 @@ from zharness.tools.workspace import (
     read_file,
     write_file,
 )
+
+
+def _format_tool_error(exc: Exception, request) -> str | None:
+    """Format a tool-execution error for the model to fix and retry. / 将工具执行错误格式化为可供模型修复并重试的信息。"""
+    return (
+        f"`{request.tool_call['name']}` failed with {type(exc).__name__}: {exc}. "
+        "Fix the input and retry, or explain the limitation to the user."
+    )
+
 
 SYSTEM_PROMPT = """
 <role>
@@ -148,6 +159,17 @@ def create_lead_agent(
                         "allowed_decisions": ["approve", "reject"],
                     }
                 }
+            ),
+            ToolErrorMiddleware(
+                on_error=_format_tool_error,
+            ),
+            ToolRetryMiddleware(
+                max_retries=3,
+                on_failure="error",
+                initial_delay=0.1,
+                backoff_factor=2.0,
+                max_delay=2.0,
+                jitter=False,
             ),
         ],
         system_prompt=system_prompt,
