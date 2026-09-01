@@ -21,16 +21,16 @@ This skill generates professional PowerPoint presentations by creating AI-genera
 
 Choose one of the following styles when creating the presentation plan:
 
-| Style | Description | Best For |
-|-------|-------------|----------|
-| **glassmorphism** | Frosted glass panels with blur effects, floating translucent cards, vibrant gradient backgrounds, depth through layering | Tech products, AI/SaaS demos, futuristic pitches |
-| **dark-premium** | Rich black backgrounds (#0a0a0a), luminous accent colors, subtle glow effects, luxury brand aesthetic | Premium products, executive presentations, high-end brands |
-| **gradient-modern** | Bold mesh gradients, fluid color transitions, contemporary typography, vibrant yet sophisticated | Startups, creative agencies, brand launches |
-| **neo-brutalist** | Raw bold typography, high contrast, intentional "ugly" aesthetic, anti-design as design, Memphis-inspired | Edgy brands, Gen-Z targeting, disruptive startups |
-| **3d-isometric** | Clean isometric illustrations, floating 3D elements, soft shadows, tech-forward aesthetic | Tech explainers, product features, SaaS presentations |
-| **editorial** | Magazine-quality layouts, sophisticated typography hierarchy, dramatic photography, Vogue/Bloomberg aesthetic | Annual reports, luxury brands, thought leadership |
-| **minimal-swiss** | Grid-based precision, Helvetica-inspired typography, bold use of negative space, timeless modernism | Architecture, design firms, premium consulting |
-| **keynote** | Apple-inspired aesthetic with bold typography, dramatic imagery, high contrast, cinematic feel | Keynotes, product reveals, inspirational talks |
+| Style               | Description                                                                                                              | Best For                                                   |
+|---------------------|--------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------|
+| **glassmorphism**   | Frosted glass panels with blur effects, floating translucent cards, vibrant gradient backgrounds, depth through layering | Tech products, AI/SaaS demos, futuristic pitches           |
+| **dark-premium**    | Rich black backgrounds (#0a0a0a), luminous accent colors, subtle glow effects, luxury brand aesthetic                    | Premium products, executive presentations, high-end brands |
+| **gradient-modern** | Bold mesh gradients, fluid color transitions, contemporary typography, vibrant yet sophisticated                         | Startups, creative agencies, brand launches                |
+| **neo-brutalist**   | Raw bold typography, high contrast, intentional "ugly" aesthetic, anti-design as design, Memphis-inspired                | Edgy brands, Gen-Z targeting, disruptive startups          |
+| **3d-isometric**    | Clean isometric illustrations, floating 3D elements, soft shadows, tech-forward aesthetic                                | Tech explainers, product features, SaaS presentations      |
+| **editorial**       | Magazine-quality layouts, sophisticated typography hierarchy, dramatic photography, Vogue/Bloomberg aesthetic            | Annual reports, luxury brands, thought leadership          |
+| **minimal-swiss**   | Grid-based precision, Helvetica-inspired typography, bold use of negative space, timeless modernism                      | Architecture, design firms, premium consulting             |
+| **keynote**         | Apple-inspired aesthetic with bold typography, dramatic imagery, high contrast, cinematic feel                           | Keynotes, product reveals, inspirational talks             |
 
 ## Workflow
 

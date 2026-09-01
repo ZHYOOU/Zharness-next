@@ -7,6 +7,11 @@ from langchain.agents.middleware import (
 from langchain_core.language_models import BaseChatModel
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
+from zharness.skills import (
+    LocalSkillStorage,
+    build_describe_skill_tool,
+    get_skill_index_prompt_section,
+)
 from zharness.tools.execute import execute_command
 from zharness.tools.workspace import (
     delete_path,
@@ -43,6 +48,9 @@ shell command execution.
 - `execute_command` can be disabled by the configured provider. If it reports
   that host bash is disabled, continue with workspace tools where possible and
   explain the limitation instead of retrying the same command.
+- `/mnt/skills` is a read-only skills mount managed by the server, not part of
+  the user's workspace. Read skill files there when a skill instructs you to;
+  never write, edit, or delete anything under it.
 </workspace_model>
 
 <thinking_style>
@@ -100,19 +108,33 @@ def create_lead_agent(
     *,
     checkpointer: BaseCheckpointSaver | None = None,
 ):
+    tools = [
+        list_workspace,
+        read_file,
+        write_file,
+        edit_file,
+        delete_path,
+        glob_files,
+        grep_files,
+        execute_command,
+    ]
+
+    system_prompt = SYSTEM_PROMPT
+
+    storage = LocalSkillStorage()
+    skills = storage.load_skills()
+    if skills:
+        tools.append(build_describe_skill_tool(storage))
+        skill_section = get_skill_index_prompt_section(
+            skill_names=frozenset(skill.name for skill in skills),
+            container_base_path=storage.get_container_root(),
+        )
+        system_prompt = f"{system_prompt}\n\n{skill_section}"
+
     return create_agent(
         name="lead_agent",
         model=model,
-        tools=[
-            list_workspace,
-            read_file,
-            write_file,
-            edit_file,
-            delete_path,
-            glob_files,
-            grep_files,
-            execute_command,
-        ],
+        tools=tools,
         middleware=[
             TodoListMiddleware(),
             SummarizationMiddleware(
@@ -128,6 +150,6 @@ def create_lead_agent(
                 }
             ),
         ],
-        system_prompt=SYSTEM_PROMPT,
+        system_prompt=system_prompt,
         checkpointer=checkpointer,
     )

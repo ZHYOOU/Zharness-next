@@ -176,9 +176,12 @@ class FakeContainers:
 
 def test_manager_creates_hardened_thread_container(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("ZHARNESS_HOME", str(tmp_path))
+    skills = tmp_path / "skills"
+    skills.mkdir()
+    monkeypatch.setenv("ZHARNESS_SKILLS_PATH", str(skills))
     containers = FakeContainers()
     client = SimpleNamespace(containers=containers)
-    settings = DockerSandboxSettings(user="1000:1000")
+    settings = DockerSandboxSettings(user="1000:1000", skills_root=str(skills))
     manager = DockerSandboxManager(client=client, settings=settings)
 
     sandbox = manager.for_thread("thread-one")
@@ -187,7 +190,10 @@ def test_manager_creates_hardened_thread_container(tmp_path: Path, monkeypatch) 
     options = containers.run_options
     assert options is not None
     workspace = str(tmp_path / "workspaces" / "thread-one")
-    assert options["volumes"] == {workspace: {"bind": "/workspace", "mode": "rw"}}
+    assert options["volumes"] == {
+        workspace: {"bind": "/workspace", "mode": "rw"},
+        str(skills.resolve()): {"bind": "/mnt/skills", "mode": "ro"},
+    }
     assert options["network_mode"] == "bridge"
     assert options["read_only"] is True
     assert options["cap_drop"] == ["ALL"]
@@ -196,6 +202,28 @@ def test_manager_creates_hardened_thread_container(tmp_path: Path, monkeypatch) 
     assert options["labels"] == {
         SANDBOX_LABEL: "true",
         THREAD_LABEL: "thread-one",
+    }
+
+
+def test_manager_creates_container_without_skills_mount(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("ZHARNESS_HOME", str(tmp_path))
+    monkeypatch.setenv("ZHARNESS_SKILLS_PATH", str(tmp_path / "missing-skills"))
+    containers = FakeContainers()
+    manager = DockerSandboxManager(
+        client=SimpleNamespace(containers=containers),
+        settings=DockerSandboxSettings(user="1000:1000", skills_root=None),
+    )
+
+    manager.for_thread("thread-one")
+
+    assert containers.run_options is not None
+    assert containers.run_options["volumes"] == {
+        str(tmp_path / "workspaces" / "thread-one"): {
+            "bind": "/workspace",
+            "mode": "rw",
+        }
     }
 
 

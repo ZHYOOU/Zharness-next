@@ -34,6 +34,7 @@ class DockerSandboxSettings:
     nano_cpus: int = 1_000_000_000
     pids_limit: int = 128
     user: str | None = None
+    skills_root: str | None = None
 
     @classmethod
     def from_env(cls) -> DockerSandboxSettings:
@@ -43,7 +44,20 @@ class DockerSandboxSettings:
                 "ZHARNESS_SANDBOX_MEMORY", DEFAULT_MEMORY_LIMIT
             ),
             user=os.environ.get("ZHARNESS_SANDBOX_USER"),
+            skills_root=_env_skills_root(),
         )
+
+
+def _env_skills_root() -> str | None:
+    """Resolve the configured skills directory for a sandbox mount, if any. / 解析沙箱挂载已配置的技能目录（如有）。"""
+    from zharness.skills.storage import skills_root_path
+
+    try:
+        root = skills_root_path()
+    except Exception:
+        logger.exception("Failed to resolve skills root for sandbox mount")
+        return None
+    return str(root) if root.is_dir() else None
 
 
 class DockerSandboxManager:
@@ -103,6 +117,15 @@ class DockerSandboxManager:
         if user is None and hasattr(os, "getuid"):
             user = f"{os.getuid()}:{os.getgid()}"
 
+        volumes: dict[str, dict[str, str]] = {
+            workspace: {"bind": "/workspace", "mode": "rw"}
+        }
+        if self.settings.skills_root:
+            volumes[self.settings.skills_root] = {
+                "bind": "/mnt/skills",
+                "mode": "ro",
+            }
+
         options: dict[str, Any] = {
             "image": self.settings.image,
             "name": name,
@@ -110,7 +133,7 @@ class DockerSandboxManager:
             "detach": True,
             "working_dir": "/workspace",
             "environment": {"HOME": "/tmp"},
-            "volumes": {workspace: {"bind": "/workspace", "mode": "rw"}},
+            "volumes": volumes,
             "network_mode": "bridge",
             "read_only": True,
             "tmpfs": {"/tmp": "rw,nosuid,nodev,noexec,size=64m"},

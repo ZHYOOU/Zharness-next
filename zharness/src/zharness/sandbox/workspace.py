@@ -6,8 +6,10 @@ from pathlib import PurePosixPath
 from typing import Final
 
 from zharness.sandbox.protocol import BackendProtocol, FileInfo, GrepMatch
+from zharness.skills.constants import DEFAULT_SKILLS_CONTAINER_PATH
 
 _CONTAINER_WORKSPACE: Final = PurePosixPath("/workspace")
+_SKILLS_CONTAINER_ROOT: Final = PurePosixPath(DEFAULT_SKILLS_CONTAINER_PATH)
 
 
 class SandboxWorkspaceError(ValueError):
@@ -36,6 +38,16 @@ class SandboxWorkspace:
         if ".." in candidate.parts:
             raise SandboxWorkspaceError("Path traversal is not allowed")
 
+        # The read-only skills namespace is passed through as an absolute
+        # container path; the backends confine it to the skills mount.
+        #
+        # 只读技能命名空间以绝对容器路径原样传递；后端会将其限制在技能挂载点内。
+        if (
+            candidate == _SKILLS_CONTAINER_ROOT
+            or _SKILLS_CONTAINER_ROOT in candidate.parents
+        ):
+            return str(candidate)
+
         relative_parts = (
             candidate.parts[1:] if candidate.is_absolute() else candidate.parts
         )
@@ -47,14 +59,20 @@ class SandboxWorkspace:
     @staticmethod
     def _virtual_path(path: str, *, is_dir: bool = False) -> str:
         candidate = PurePosixPath(path)
-        try:
-            relative = candidate.relative_to(_CONTAINER_WORKSPACE)
-        except ValueError as exc:
-            raise SandboxWorkspaceError(
-                "Sandbox returned a path outside the workspace"
-            ) from exc
+        if (
+            candidate == _SKILLS_CONTAINER_ROOT
+            or _SKILLS_CONTAINER_ROOT in candidate.parents
+        ):
+            virtual = candidate.as_posix()
+        else:
+            try:
+                relative = candidate.relative_to(_CONTAINER_WORKSPACE)
+            except ValueError as exc:
+                raise SandboxWorkspaceError(
+                    "Sandbox returned a path outside the workspace"
+                ) from exc
 
-        virtual = "/" if relative == PurePosixPath(".") else f"/{relative}"
+            virtual = "/" if relative == PurePosixPath(".") else f"/{relative}"
         if is_dir and virtual != "/":
             virtual += "/"
         return virtual

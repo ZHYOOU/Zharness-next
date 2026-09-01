@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shlex
 import shutil
 import signal
 import stat
@@ -45,6 +46,7 @@ from zharness.sandbox.protocol import (
     SandboxBackendProtocol,
     WriteResult,
 )
+from zharness.skills.constants import DEFAULT_SKILLS_CONTAINER_PATH
 from zharness.utils import (
     InvalidGlobPatternError,
     compile_grep_include_glob,
@@ -55,6 +57,7 @@ from zharness.workspace.paths import ensure_thread_workspace
 logger = logging.getLogger(__name__)
 
 SANDBOX_ROOT: Final = PurePosixPath("/workspace")
+SKILLS_SANDBOX_ROOT: Final = PurePosixPath(DEFAULT_SKILLS_CONTAINER_PATH)
 
 DEFAULT_MAX_FILE_BYTES: Final = 256 * 1024
 DEFAULT_MAX_RESULTS: Final = 100
@@ -74,6 +77,7 @@ class LocalSandbox(SandboxBackendProtocol):
         root: str | Path,
         *,
         allow_host_bash: bool = False,
+        skills_root: str | Path | None = None,
         max_file_bytes: int = DEFAULT_MAX_FILE_BYTES,
         max_results: int = DEFAULT_MAX_RESULTS,
         max_output_bytes: int = DEFAULT_MAX_OUTPUT_BYTES,
@@ -94,6 +98,15 @@ class LocalSandbox(SandboxBackendProtocol):
 
         self.root = resolved_root
         self.allow_host_bash = allow_host_bash
+        self.skills_root: Path | None = None
+        if skills_root is not None:
+            try:
+                resolved_skills = Path(skills_root).expanduser().resolve(strict=True)
+            except (OSError, RuntimeError) as exc:
+                raise LocalSandboxError("Skills root does not exist") from exc
+            if not resolved_skills.is_dir():
+                raise LocalSandboxError("Skills root is not a directory")
+            self.skills_root = resolved_skills
         self.max_file_bytes = max_file_bytes
         self.max_results = max_results
         self.max_output_bytes = max_output_bytes
@@ -109,6 +122,26 @@ class LocalSandbox(SandboxBackendProtocol):
     # Path translation
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _is_skills_path(path: str) -> bool:
+        parsed = PurePosixPath(path)
+        return parsed == SKILLS_SANDBOX_ROOT or SKILLS_SANDBOX_ROOT in parsed.parents
+
+    def _assert_within_mount(self, resolved: Path) -> None:
+        """Raise ``ValueError`` when ``resolved`` escapes every configured root. / 当 ``resolved`` 逃逸所有已配置根目录时抛出 ``ValueError``。"""
+        try:
+            resolved.relative_to(self.root)
+            return
+        except ValueError:
+            pass
+        if self.skills_root is not None:
+            try:
+                resolved.relative_to(self.skills_root)
+                return
+            except ValueError:
+                pass
+        raise ValueError("Path escapes the workspace")
+
     def _lexical_path(self, path: str, *, allow_root: bool = True) -> Path:
         """Map a validated sandbox path to an unresolved host path."""
         if not isinstance(path, str) or "\0" in path:
@@ -119,6 +152,17 @@ class LocalSandbox(SandboxBackendProtocol):
         parsed = PurePosixPath(path)
         if not parsed.is_absolute():
             raise LocalSandboxError("Sandbox paths must be absolute")
+
+        if self._is_skills_path(path):
+            if self.skills_root is None:
+                raise LocalSandboxError("Skills mount is not configured")
+            host = self.skills_root.joinpath(
+                *parsed.relative_to(SKILLS_SANDBOX_ROOT).parts
+            )
+            if not allow_root and host == self.skills_root:
+                raise LocalSandboxError("Cannot operate on the skills mount root")
+            return host
+
         try:
             relative = parsed.relative_to(SANDBOX_ROOT)
         except ValueError as exc:
@@ -130,11 +174,11 @@ class LocalSandbox(SandboxBackendProtocol):
         return host
 
     def resolve_path(self, path: str) -> Path:
-        """Resolve a sandbox path, rejecting symlinks that escape ``root``."""
+        """Resolve a sandbox path, rejecting symlinks that escape the roots. / 解析沙箱路径，并拒绝逃逸根目录的符号链接。"""
         lexical = self._lexical_path(path)
         try:
             resolved = lexical.resolve(strict=False)
-            resolved.relative_to(self.root)
+            self._assert_within_mount(resolved)
         except ValueError as exc:
             raise LocalSandboxError("Path escapes the workspace") from exc
         except (OSError, RuntimeError) as exc:
@@ -142,7 +186,16 @@ class LocalSandbox(SandboxBackendProtocol):
         return resolved
 
     def _sandbox_path(self, host: Path) -> str:
-        """Convert a host path beneath ``root`` to a sandbox path."""
+        """Convert a host path beneath ``root`` or the skills mount to a sandbox path. / 将 ``root`` 或技能挂载点下的主机路径转换为沙箱路径。"""
+        if self.skills_root is not None:
+            try:
+                relative = host.relative_to(self.skills_root)
+            except ValueError:
+                pass
+            else:
+                if not relative.parts:
+                    return str(SKILLS_SANDBOX_ROOT)
+                return f"{SKILLS_SANDBOX_ROOT}/{relative.as_posix()}"
         try:
             relative = host.relative_to(self.root)
         except ValueError as exc:
@@ -163,6 +216,57 @@ class LocalSandbox(SandboxBackendProtocol):
         if not target.is_file():
             raise LocalSandboxError(f"Not a regular file: {path}")
         return target
+
+    def _host_command(self, command: str) -> str:
+        """Map the advertised skills mount to its host path for local execution. / 为本地执行将对外提供的技能挂载路径映射到其主机路径。"""
+        if self.skills_root is None:
+            return command
+
+        mount = str(SKILLS_SANDBOX_ROOT)
+        host = str(self.skills_root)
+        mapped: list[str] = []
+        quote: str | None = None
+        escaped = False
+        index = 0
+        while index < len(command):
+            char = command[index]
+            if escaped:
+                mapped.append(char)
+                escaped = False
+                index += 1
+                continue
+            if char == "\\" and quote != "'":
+                mapped.append(char)
+                escaped = True
+                index += 1
+                continue
+            if char in {"'", '"'}:
+                if quote is None:
+                    quote = char
+                elif quote == char:
+                    quote = None
+                mapped.append(char)
+                index += 1
+                continue
+            if command.startswith(mount, index) and (
+                index + len(mount) == len(command) or command[index + len(mount)] == "/"
+            ):
+                if quote == "'":
+                    mapped.append(host.replace("'", "'\"'\"'"))
+                elif quote == '"':
+                    mapped.append(
+                        host.replace("\\", "\\\\")
+                        .replace('"', '\\"')
+                        .replace("$", "\\$")
+                        .replace("`", "\\`")
+                    )
+                else:
+                    mapped.append(shlex.quote(host))
+                index += len(mount)
+                continue
+            mapped.append(char)
+            index += 1
+        return "".join(mapped)
 
     # ------------------------------------------------------------------
     # SandboxBackendProtocol operations
@@ -188,7 +292,7 @@ class LocalSandbox(SandboxBackendProtocol):
                     continue
                 try:
                     resolved = child.resolve(strict=True)
-                    resolved.relative_to(self.root)
+                    self._assert_within_mount(resolved)
                     stat = child.stat()
                 except ValueError, OSError, RuntimeError:
                     continue
@@ -254,6 +358,8 @@ class LocalSandbox(SandboxBackendProtocol):
 
     def write(self, file_path: str, content: str) -> WriteResult:
         """Atomically create or replace a UTF-8 text file."""
+        if self._is_skills_path(file_path):
+            return WriteResult(error="The skills mount is read-only")
         if not isinstance(content, str):
             return WriteResult(error="File content must be text")
         encoded = content.encode("utf-8")
@@ -334,6 +440,8 @@ class LocalSandbox(SandboxBackendProtocol):
 
     def delete(self, file_path: str) -> DeleteResult:
         """Delete a file, symlink, or directory tree without following links."""
+        if self._is_skills_path(file_path):
+            return DeleteResult(error="The skills mount is read-only")
         try:
             lexical = self._lexical_path(file_path, allow_root=False)
         except LocalSandboxError as exc:
@@ -388,7 +496,7 @@ class LocalSandbox(SandboxBackendProtocol):
                 if not candidate.is_file() or candidate.is_symlink():
                     continue
                 try:
-                    candidate.resolve(strict=True).relative_to(self.root)
+                    self._assert_within_mount(candidate.resolve(strict=True))
                 except ValueError, OSError, RuntimeError:
                     continue
                 relative = candidate.relative_to(base).as_posix()
@@ -438,7 +546,7 @@ class LocalSandbox(SandboxBackendProtocol):
                 if not candidate.is_file() or candidate.is_symlink():
                     continue
                 try:
-                    candidate.resolve(strict=True).relative_to(self.root)
+                    self._assert_within_mount(candidate.resolve(strict=True))
                     relative = (
                         candidate.name
                         if base.is_file()
@@ -476,6 +584,8 @@ class LocalSandbox(SandboxBackendProtocol):
             try:
                 if not isinstance(content, bytes):
                     raise TypeError("file content must be bytes")
+                if self._is_skills_path(path):
+                    raise LocalSandboxError("The skills mount is read-only")
                 lexical = self._lexical_path(path)
                 if lexical == self.root:
                     raise LocalSandboxError("Cannot write to the workspace root")
@@ -584,7 +694,7 @@ class LocalSandbox(SandboxBackendProtocol):
         *,
         timeout: int | None = None,
     ) -> ExecuteResponse:
-        """Run a shell command on the host when host bash is enabled."""
+        """Run a shell command on the host when host bash is enabled. / 启用主机 Bash 后在主机上运行 shell 命令。"""
         if not self.allow_host_bash:
             return ExecuteResponse(
                 output=(
@@ -604,7 +714,7 @@ class LocalSandbox(SandboxBackendProtocol):
 
         try:
             proc = subprocess.Popen(
-                ["/bin/sh", "-lc", command],
+                ["/bin/sh", "-lc", self._host_command(command)],
                 cwd=self.root,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -663,19 +773,33 @@ class LocalSandbox(SandboxBackendProtocol):
 
 @dataclass(frozen=True, slots=True)
 class LocalSandboxSettings:
-    """Configuration for the local sandbox provider."""
+    """Configuration for the local sandbox provider. / 本地沙箱提供程序的配置。"""
 
     root: str | None = None
     allow_host_bash: bool = False
+    skills_root: str | None = None
 
     @classmethod
     def from_env(cls) -> LocalSandboxSettings:
-        """Build settings from environment variables."""
+        """Build settings from environment variables. / 从环境变量构建配置。"""
         return cls(
             root=os.environ.get("ZHARNESS_LOCAL_ROOT"),
             allow_host_bash=os.environ.get("ZHARNESS_ALLOW_HOST_BASH", "").lower()
             in {"1", "true", "yes"},
+            skills_root=_env_skills_root(),
         )
+
+
+def _env_skills_root() -> str | None:
+    """Resolve the configured skills directory for a local sandbox, if any. / 解析本地沙箱已配置的技能目录（如有）。"""
+    from zharness.skills.storage import skills_root_path
+
+    try:
+        root = skills_root_path()
+    except Exception:
+        logger.exception("Failed to resolve skills root for local sandbox")
+        return None
+    return str(root) if root.is_dir() else None
 
 
 class LocalSandboxManager:
@@ -685,6 +809,12 @@ class LocalSandboxManager:
     ``ZHARNESS_HOME/workspaces`` (mirroring the Docker backend). When
     ``ZHARNESS_LOCAL_ROOT`` is set, every thread shares that directory, which
     is the intended way to let the agent work directly on a local project.
+
+    为每个服务器线程提供一个 `LocalSandbox`。
+
+    未配置根目录时，每个线程会在 ``ZHARNESS_HOME/workspaces`` 下获得独立工作区
+    （与 Docker 后端一致）。设置 ``ZHARNESS_LOCAL_ROOT`` 后，所有线程共享该目录，
+    这是让 agent 直接处理本地项目的预期方式。
     """
 
     def __init__(
@@ -693,13 +823,13 @@ class LocalSandboxManager:
         client: object | None = None,
         settings: LocalSandboxSettings | None = None,
     ) -> None:
-        del client  # accepted for a common manager interface; unused locally
+        del client  # Accepted for a common manager interface; unused locally. / 为统一管理器接口而接受；本地未使用。
         self.settings = settings or LocalSandboxSettings.from_env()
         self._lock = threading.Lock()
         self._sandboxes: dict[str, LocalSandbox] = {}
 
     def for_thread(self, thread_id: str) -> LocalSandbox:
-        """Return the local sandbox for a thread, creating it on first use."""
+        """Return the local sandbox for a thread, creating it on first use. / 返回线程的本地沙箱，首次使用时创建。"""
         with self._lock:
             sandbox = self._sandboxes.get(thread_id)
             if sandbox is None:
@@ -709,13 +839,15 @@ class LocalSandboxManager:
                 else:
                     root = ensure_thread_workspace(thread_id)
                 sandbox = LocalSandbox(
-                    root, allow_host_bash=self.settings.allow_host_bash
+                    root,
+                    allow_host_bash=self.settings.allow_host_bash,
+                    skills_root=self.settings.skills_root,
                 )
                 self._sandboxes[thread_id] = sandbox
             return sandbox
 
     def remove_for_thread(self, thread_id: str) -> bool:
-        """Drop a thread's local sandbox, removing its per-thread workspace."""
+        """Drop a thread's local sandbox, removing its per-thread workspace. / 移除线程的本地沙箱及其线程工作区。"""
         with self._lock:
             sandbox = self._sandboxes.pop(thread_id, None)
         if sandbox is None:
@@ -730,7 +862,7 @@ class LocalSandboxManager:
         return True
 
     def stop_all(self, *, timeout: int = 10) -> list[str]:
-        """Stop commands currently running in any local sandbox."""
+        """Stop commands currently running in any local sandbox. / 停止所有本地沙箱中当前运行的命令。"""
         del timeout
         with self._lock:
             sandboxes = tuple(self._sandboxes.values())

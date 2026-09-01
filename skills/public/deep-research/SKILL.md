@@ -84,14 +84,14 @@ Then fetch and read:
 
 Ensure comprehensive coverage by seeking diverse information types:
 
-| Information Type | Purpose | Example Searches |
-|-----------------|---------|------------------|
-| **Facts & Data** | Concrete evidence | "statistics", "data", "numbers", "market size" |
-| **Examples & Cases** | Real-world applications | "case study", "example", "implementation" |
-| **Expert Opinions** | Authority perspectives | "expert analysis", "interview", "commentary" |
-| **Trends & Predictions** | Future direction | "trends 2024", "forecast", "future of" |
-| **Comparisons** | Context and alternatives | "vs", "comparison", "alternatives" |
-| **Challenges & Criticisms** | Balanced view | "challenges", "limitations", "criticism" |
+| Information Type            | Purpose                  | Example Searches                               |
+|-----------------------------|--------------------------|------------------------------------------------|
+| **Facts & Data**            | Concrete evidence        | "statistics", "data", "numbers", "market size" |
+| **Examples & Cases**        | Real-world applications  | "case study", "example", "implementation"      |
+| **Expert Opinions**         | Authority perspectives   | "expert analysis", "interview", "commentary"   |
+| **Trends & Predictions**    | Future direction         | "trends 2024", "forecast", "future of"         |
+| **Comparisons**             | Context and alternatives | "vs", "comparison", "alternatives"             |
+| **Challenges & Criticisms** | Balanced view            | "challenges", "limitations", "criticism"       |
 
 ### Phase 4: Synthesis Check
 
