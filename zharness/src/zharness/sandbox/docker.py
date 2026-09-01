@@ -1,4 +1,4 @@
-"""Docker implementation of the sandbox backend."""
+"""Docker implementation of the sandbox backend. / 沙箱后端的 Docker 实现。"""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ DEFAULT_MAX_TRANSFER_BYTES: Final = 16 * 1024 * 1024
 
 
 def _validated_path(path: str) -> PurePosixPath:
-    """Validate an absolute path passed across the container boundary."""
+    """Validate an absolute path passed across the container boundary. / 校验跨容器边界传入的绝对路径。"""
 
     if not isinstance(path, str) or not path.startswith("/") or "\0" in path:
         raise ValueError("sandbox paths must be absolute")
@@ -46,7 +46,7 @@ def _api_error_code(exc: APIError) -> str:
 
 
 class DockerSandbox(BaseSandbox):
-    """Run commands and transfer files through one Docker container."""
+    """Run commands and transfer files through one Docker container. / 通过一个 Docker 容器执行命令并传输文件。"""
 
     enable_capture_offload = True
 
@@ -76,7 +76,7 @@ class DockerSandbox(BaseSandbox):
         *,
         timeout: int | None = None,
     ) -> ExecuteResponse:
-        """Execute a shell command, bounding its runtime and retained output."""
+        """Execute a shell command, bounding its runtime and retained output. / 执行 shell 命令，并限制其运行时长与保留的输出。"""
 
         if not isinstance(command, str) or not command:
             return ExecuteResponse(
@@ -187,7 +187,7 @@ class DockerSandbox(BaseSandbox):
         return responses
 
     def _container_ownership(self) -> tuple[int, int]:
-        """Return the numeric user/group used by commands in the container."""
+        """Return the numeric user/group used by commands in the container. / 返回容器内命令所使用的数字用户/组 ID。"""
 
         if self._ownership is not None:
             return self._ownership

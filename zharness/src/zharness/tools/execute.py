@@ -1,4 +1,4 @@
-"""Agent tool for command execution inside a thread-scoped sandbox."""
+"""Agent tool for command execution inside a thread-scoped sandbox. / 在线程作用域沙箱内执行命令的 Agent 工具。"""
 
 from langchain.tools import ToolRuntime, tool
 
@@ -16,7 +16,7 @@ def execute_command(
     *,
     runtime: ToolRuntime,
 ) -> str:
-    """Execute a shell command in the current thread's isolated workspace."""
+    """Execute a shell command in the current thread's isolated workspace. / 在当前线程的隔离工作区中执行 shell 命令。"""
 
     execution_info = runtime.execution_info
     thread_id = execution_info.thread_id if execution_info is not None else None

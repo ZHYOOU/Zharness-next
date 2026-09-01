@@ -1,4 +1,4 @@
-"""Workspace-confined view over a sandbox backend."""
+"""Workspace-confined view over a sandbox backend. / 沙箱后端之上的工作区受限视图。"""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ _SKILLS_CONTAINER_ROOT: Final = PurePosixPath(DEFAULT_SKILLS_CONTAINER_PATH)
 
 
 class SandboxWorkspaceError(ValueError):
-    """Raised when a workspace path or sandbox file operation is invalid."""
+    """Raised when a workspace path or sandbox file operation is invalid. / 当工作区路径或沙箱文件操作无效时抛出。"""
 
 
 class SandboxWorkspace:
@@ -22,6 +22,10 @@ class SandboxWorkspace:
     Agent-visible paths are rooted at ``/``. The wrapped sandbox receives only
     paths beneath ``/workspace``, which is the thread workspace mount managed
     by :class:`DockerSandboxManager`.
+
+    通过一个虚拟工作区根目录暴露单个沙箱后端。Agent 可见的路径以 ``/`` 为根，
+    被包装的沙箱只接收 ``/workspace`` 之下的路径，该路径即由
+    :class:`DockerSandboxManager` 管理的线程工作区挂载点。
     """
 
     def __init__(self, backend: BackendProtocol) -> None:

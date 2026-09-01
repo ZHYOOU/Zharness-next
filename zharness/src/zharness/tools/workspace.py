@@ -29,7 +29,7 @@ def list_workspace(
     *,
     runtime: ToolRuntime,
 ) -> list[FileInfo] | str:
-    """List direct children and metadata at a virtual workspace path."""
+    """List direct children and metadata at a virtual workspace path. / 列出虚拟工作区路径下的直接子项及其元数据。"""
 
     try:
         return _runtime_workspace(runtime).ls(path)
@@ -45,7 +45,7 @@ def read_file(
     *,
     runtime: ToolRuntime,
 ) -> str:
-    """Read a UTF-8 file from a virtual path with optional line pagination."""
+    """Read a UTF-8 file from a virtual path with optional line pagination. / 从虚拟路径读取 UTF-8 文件，可选按行分页。"""
 
     try:
         return _runtime_workspace(runtime).read(path, offset=offset, limit=limit)
@@ -60,7 +60,7 @@ def write_file(
     *,
     runtime: ToolRuntime,
 ) -> str:
-    """Atomically create or overwrite a UTF-8 file at a virtual path."""
+    """Atomically create or overwrite a UTF-8 file at a virtual path. / 在虚拟路径上原子地创建或覆盖 UTF-8 文件。"""
 
     try:
         written_path = _runtime_workspace(runtime).write(path, content)
@@ -78,7 +78,7 @@ def edit_file(
     *,
     runtime: ToolRuntime,
 ) -> str:
-    """Replace exact text in a UTF-8 workspace file."""
+    """Replace exact text in a UTF-8 workspace file. / 替换 UTF-8 工作区文件中的精确文本。"""
 
     try:
         count = _runtime_workspace(runtime).edit(
@@ -98,7 +98,7 @@ def delete_path(
     *,
     runtime: ToolRuntime,
 ) -> str:
-    """Delete a file or directory tree from the current workspace."""
+    """Delete a file or directory tree from the current workspace. / 从当前工作区删除文件或目录树。"""
 
     try:
         deleted_path = _runtime_workspace(runtime).delete(path)
@@ -114,7 +114,7 @@ def glob_files(
     *,
     runtime: ToolRuntime,
 ) -> list[str] | str:
-    """Find workspace files and directories matching a glob pattern."""
+    """Find workspace files and directories matching a glob pattern. / 查找匹配 glob 模式的工作区文件和目录。"""
 
     try:
         return _runtime_workspace(runtime).glob(pattern, path=path)
@@ -130,7 +130,7 @@ def grep_files(
     *,
     runtime: ToolRuntime,
 ) -> list[GrepMatch] | str:
-    """Search workspace text files for a literal string."""
+    """Search workspace text files for a literal string. / 在工作区文本文件中搜索字面字符串。"""
 
     try:
         return _runtime_workspace(runtime).grep(pattern, path=path, include=include)

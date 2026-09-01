@@ -1,4 +1,4 @@
-"""Thread-scoped Docker sandbox lifecycle management."""
+"""Thread-scoped Docker sandbox lifecycle management. / 线程作用域的 Docker 沙箱生命周期管理。"""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 class SandboxUnavailableError(RuntimeError):
-    """Raised when a thread sandbox cannot be provisioned."""
+    """Raised when a thread sandbox cannot be provisioned. / 当线程沙箱无法创建时抛出。"""
 
 
 class SandboxConfigurationMismatchError(SandboxUnavailableError):
@@ -75,7 +75,7 @@ def _env_skills_root() -> str | None:
 
 
 class DockerSandboxManager:
-    """Create or reuse one hardened Docker container per server thread."""
+    """Create or reuse one hardened Docker container per server thread. / 为每个服务器线程创建或复用加固后的 Docker 容器。"""
 
     def __init__(
         self,
@@ -243,7 +243,7 @@ class DockerSandboxManager:
             return container
 
     def remove_for_thread(self, thread_id: str) -> bool:
-        """Force-remove this thread's container, returning whether one existed."""
+        """Force-remove this thread's container, returning whether one existed. / 强制移除该线程的容器，并返回容器是否存在。"""
 
         workspace = str(thread_workspace_path(thread_id))
         name = self.container_name(thread_id)
@@ -266,7 +266,7 @@ class DockerSandboxManager:
             return True
 
     def stop_all(self, *, timeout: int = 10) -> list[str]:
-        """Stop every running ZHarness sandbox without deleting it."""
+        """Stop every running ZHarness sandbox without deleting it. / 停止所有正在运行的 ZHarness 沙箱，但不删除它们。"""
 
         if timeout < 0:
             raise ValueError("stop timeout must be non-negative")
@@ -383,6 +383,8 @@ def get_sandbox_manager() -> DockerSandboxManager | object:
 
     ``ZHARNESS_SANDBOX_PROVIDER=local`` selects the local filesystem sandbox;
     anything else selects the Docker sandbox.
+
+    ``ZHARNESS_SANDBOX_PROVIDER=local`` 选择本地文件系统沙箱；其他值选择 Docker 沙箱。
     """
     global _manager
     with _manager_lock:

@@ -1,15 +1,25 @@
 """Local filesystem sandbox backend.
 
+本地文件系统沙箱后端。
+
 [`LocalSandbox`][zharness.sandbox.local.LocalSandbox] implements
 [`SandboxBackendProtocol`][zharness.sandbox.protocol.SandboxBackendProtocol]
 against a directory on the host. It is the analogue of the Docker backend for
 single-user, trusted local deployments: file tools operate directly on a local
 root, and host bash execution is disabled unless explicitly enabled.
 
+`LocalSandbox` 针对主机上的一个目录实现 `SandboxBackendProtocol`。对于单用户、
+受信任的本地部署，它是 Docker 后端的对等实现：文件工具直接操作本地根目录，
+主机 Bash 执行在显式启用前始终禁用。
+
 Agent-visible paths are rooted at ``/workspace`` (the same path space the
 Docker backend uses) and map onto ``root`` on the host. Path traversal, home
 expansion, and symlink escapes are rejected, so every operation stays confined
 to ``root``.
+
+agent 可见的路径以 ``/workspace`` 为根（与 Docker 后端使用相同的路径空间），
+并映射到主机上的 ``root``。路径遍历、home 目录展开以及符号链接逃逸都会被拒绝，
+因此所有操作都限制在 ``root`` 之内。
 """
 
 from __future__ import annotations
@@ -68,11 +78,11 @@ DEFAULT_EXECUTE_TIMEOUT: Final = 30
 
 
 class LocalSandboxError(ValueError):
-    """Raised when a local sandbox operation cannot be completed safely."""
+    """Raised when a local sandbox operation cannot be completed safely. / 当本地沙箱操作无法安全完成时抛出。"""
 
 
 class LocalSandbox(SandboxBackendProtocol):
-    """Access a host directory through the sandbox backend protocol."""
+    """Access a host directory through the sandbox backend protocol. / 通过沙箱后端协议访问主机目录。"""
 
     def __init__(
         self,
@@ -117,11 +127,11 @@ class LocalSandbox(SandboxBackendProtocol):
 
     @property
     def id(self) -> str:
-        """Stable identifier for this local sandbox instance."""
+        """Stable identifier for this local sandbox instance. / 本地沙箱实例的稳定标识符。"""
         return f"local:{self.root}"
 
     # ------------------------------------------------------------------
-    # Path translation
+    # Path translation / 路径转换
     # ------------------------------------------------------------------
 
     @staticmethod
@@ -145,7 +155,7 @@ class LocalSandbox(SandboxBackendProtocol):
         raise ValueError("Path escapes the workspace")
 
     def _lexical_path(self, path: str, *, allow_root: bool = True) -> Path:
-        """Map a validated sandbox path to an unresolved host path."""
+        """Map a validated sandbox path to an unresolved host path. / 将已验证的沙箱路径映射为未解析的主机路径。"""
         if not isinstance(path, str) or "\0" in path:
             raise LocalSandboxError("Invalid sandbox path")
         if path.startswith("~"):
@@ -292,11 +302,11 @@ class LocalSandbox(SandboxBackendProtocol):
             yield snapshot
 
     # ------------------------------------------------------------------
-    # SandboxBackendProtocol operations
+    # SandboxBackendProtocol operations / SandboxBackendProtocol 操作
     # ------------------------------------------------------------------
 
     def ls(self, path: str) -> LsResult:
-        """List direct children of a sandbox directory in deterministic order."""
+        """List direct children of a sandbox directory in deterministic order. / 按确定性顺序列出沙箱目录的直接子项。"""
         try:
             directory = self.resolve_path(path)
             if not directory.exists():
@@ -345,7 +355,7 @@ class LocalSandbox(SandboxBackendProtocol):
         offset: int = 0,
         limit: int = 2000,
     ) -> ReadResult:
-        """Read a UTF-8 file, optionally selecting a zero-based line window."""
+        """Read a UTF-8 file, optionally selecting a zero-based line window. / 读取 UTF-8 文件，可选地选择从零开始计数的行窗口。"""
         try:
             target = self._regular_file(file_path)
         except LocalSandboxError as exc:
@@ -380,7 +390,7 @@ class LocalSandbox(SandboxBackendProtocol):
         )
 
     def write(self, file_path: str, content: str) -> WriteResult:
-        """Atomically create or replace a UTF-8 text file."""
+        """Atomically create or replace a UTF-8 text file. / 原子地创建或替换 UTF-8 文本文件。"""
         if self._is_skills_path(file_path):
             return WriteResult(error="The skills mount is read-only")
         if not isinstance(content, str):
@@ -438,7 +448,7 @@ class LocalSandbox(SandboxBackendProtocol):
         new_string: str,
         replace_all: bool = False,
     ) -> EditResult:
-        """Replace one unique string, or every occurrence, in a text file."""
+        """Replace one unique string, or every occurrence, in a text file. / 替换文本文件中的一个唯一字符串或所有出现的字符串。"""
         if not old_string:
             return EditResult(error="old_string must not be empty")
         read_result = self.read(file_path, limit=2**31 - 1)
@@ -462,7 +472,7 @@ class LocalSandbox(SandboxBackendProtocol):
         )
 
     def delete(self, file_path: str) -> DeleteResult:
-        """Delete a file, symlink, or directory tree without following links."""
+        """Delete a file, symlink, or directory tree without following links. / 不跟随链接地删除文件、符号链接或目录树。"""
         if self._is_skills_path(file_path):
             return DeleteResult(error="The skills mount is read-only")
         try:
@@ -501,7 +511,7 @@ class LocalSandbox(SandboxBackendProtocol):
         return DeleteResult(path=self._normalize_virtual(file_path))
 
     def glob(self, pattern: str, path: str | None = None) -> GlobResult:
-        """Find files matching a glob pattern beneath a sandbox directory."""
+        """Find files matching a glob pattern beneath a sandbox directory. / 在沙箱目录下查找匹配 glob 模式的文件。"""
         try:
             matcher = compile_grep_include_glob(pattern)
             base = self.resolve_path(path or str(SANDBOX_ROOT))
@@ -542,7 +552,7 @@ class LocalSandbox(SandboxBackendProtocol):
         *,
         max_count: int | None = None,
     ) -> GrepResult:
-        """Search UTF-8 sandbox files for a literal string."""
+        """Search UTF-8 sandbox files for a literal string. / 在 UTF-8 沙箱文件中搜索字面字符串。"""
         if not pattern:
             return GrepResult(error="Search pattern must not be empty")
         matcher = None
@@ -601,7 +611,7 @@ class LocalSandbox(SandboxBackendProtocol):
         return GrepResult(matches=matches)
 
     def upload_files(self, files: list[tuple[str, bytes]]) -> list[FileUploadResponse]:
-        """Write byte content directly to files beneath ``root``."""
+        """Write byte content directly to files beneath ``root``. / 将字节内容直接写入 ``root`` 下的文件。"""
         responses: list[FileUploadResponse] = []
         for path, content in files:
             try:
@@ -655,7 +665,7 @@ class LocalSandbox(SandboxBackendProtocol):
         return responses
 
     def download_files(self, paths: list[str]) -> list[FileDownloadResponse]:
-        """Read byte content from files beneath ``root``."""
+        """Read byte content from files beneath ``root``. / 从 ``root`` 下的文件读取字节内容。"""
         responses: list[FileDownloadResponse] = []
         for path in paths:
             try:
@@ -809,7 +819,7 @@ class LocalSandbox(SandboxBackendProtocol):
 
     @staticmethod
     def _terminate_process_group(proc: subprocess.Popen[bytes]) -> None:
-        """Kill a command and every descendant that remains in its process group."""
+        """Kill a command and every descendant that remains in its process group. / 终止命令及其仍在进程组中的全部后代进程。"""
         try:
             os.killpg(proc.pid, signal.SIGKILL)
         except ProcessLookupError:
@@ -818,7 +828,7 @@ class LocalSandbox(SandboxBackendProtocol):
             proc.kill()
 
     def stop_processes(self) -> bool:
-        """Stop commands currently running in this sandbox."""
+        """Stop commands currently running in this sandbox. / 停止此沙箱中当前正在运行的命令。"""
         with self._process_lock:
             processes = tuple(self._processes)
         for proc in processes:
