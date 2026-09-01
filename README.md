@@ -122,6 +122,7 @@ Optional settings:
 | `ZHARNESS_SANDBOX_PROVIDER` | `docker` | Sandbox backend: `docker` or `local` |
 | `ZHARNESS_SANDBOX_IMAGE` | `zharness-sandbox:latest` | Sandbox image name |
 | `ZHARNESS_SANDBOX_MEMORY` | `512m` | Memory limit per container |
+| `ZHARNESS_SANDBOX_NETWORK` | Enabled | Docker sandbox network access; set to `0`, `false`, or `no` to disable |
 | `ZHARNESS_SANDBOX_USER` | Server process UID/GID | Container user, for example `1000:1000` |
 | `ZHARNESS_LOCAL_ROOT` | Per-thread workspace | Host directory used by every thread with the local provider |
 | `ZHARNESS_ALLOW_HOST_BASH` | Disabled | Allow the local provider to execute host shell commands (`1`, `true`, or `yes`) |

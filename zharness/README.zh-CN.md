@@ -90,7 +90,7 @@ Docker 容器。thread 工作区以读写方式挂载到容器内的 `/workspace
 以下限制：
 
 - 根文件系统只读；
-- 可联网访问宿主机网络；
+- 默认通过 Docker bridge 网络访问外部网络；
 - 丢弃全部 Linux capabilities；
 - 启用 `no-new-privileges`；
 - `/tmp` 使用带 `nosuid`、`nodev` 和 `noexec` 的 tmpfs；
@@ -119,6 +119,7 @@ wget 和 C 编译工具链。容器可联网，可在运行时安装依赖，但
 | `ZHARNESS_SANDBOX_PROVIDER` | `docker` | 沙箱后端：`docker` 或 `local` |
 | `ZHARNESS_SANDBOX_IMAGE` | `zharness-sandbox:latest` | Docker 镜像名称 |
 | `ZHARNESS_SANDBOX_MEMORY` | `512m` | 容器内存限制 |
+| `ZHARNESS_SANDBOX_NETWORK` | 开启 | Docker 沙箱网络访问；设为 `0`/`false`/`no` 时关闭 |
 | `ZHARNESS_SANDBOX_USER` | 服务进程 UID/GID | 容器运行用户，例如 `1000:1000` |
 | `ZHARNESS_HOME` | `./.zharness` | thread 工作区父目录 |
 | `ZHARNESS_LOCAL_ROOT` | 无 | 本地沙箱根目录，所有 thread 共享（不设置则为各 thread 独立的 `ZHARNESS_HOME/workspaces/<thread_id>`） |

@@ -19,6 +19,7 @@ SANDBOX_LABEL: Final = "zharness.sandbox"
 THREAD_LABEL: Final = "zharness.thread_id"
 DEFAULT_IMAGE: Final = "zharness-sandbox:latest"
 DEFAULT_MEMORY_LIMIT: Final = "512m"
+DEFAULT_NETWORK_ENABLED: Final = True
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ class DockerSandboxSettings:
     pids_limit: int = 128
     user: str | None = None
     skills_root: str | None = None
+    network_enabled: bool = DEFAULT_NETWORK_ENABLED
 
     @classmethod
     def from_env(cls) -> DockerSandboxSettings:
@@ -43,6 +45,10 @@ class DockerSandboxSettings:
             memory_limit=os.environ.get(
                 "ZHARNESS_SANDBOX_MEMORY", DEFAULT_MEMORY_LIMIT
             ),
+            network_enabled=os.environ.get("ZHARNESS_SANDBOX_NETWORK", "true")
+            .strip()
+            .lower()
+            not in {"0", "false", "no"},
             user=os.environ.get("ZHARNESS_SANDBOX_USER"),
             skills_root=_env_skills_root(),
         )
@@ -134,7 +140,7 @@ class DockerSandboxManager:
             "working_dir": "/workspace",
             "environment": {"HOME": "/tmp"},
             "volumes": volumes,
-            "network_mode": "bridge",
+            "network_mode": "bridge" if self.settings.network_enabled else "none",
             "read_only": True,
             "tmpfs": {"/tmp": "rw,nosuid,nodev,noexec,size=64m"},
             "cap_drop": ["ALL"],
@@ -211,8 +217,9 @@ class DockerSandboxManager:
                     )
             return stopped
 
-    @staticmethod
-    def _validate_container(container: Any, thread_id: str, workspace: str) -> None:
+    def _validate_container(
+        self, container: Any, thread_id: str, workspace: str
+    ) -> None:
         attrs = container.attrs
         config = attrs.get("Config", {})
         host_config = attrs.get("HostConfig", {})
@@ -235,9 +242,10 @@ class DockerSandboxManager:
             )
 
         security_options = host_config.get("SecurityOpt", []) or []
+        expected_network_mode = "bridge" if self.settings.network_enabled else "none"
         hardened = (
             host_config.get("ReadonlyRootfs") is True
-            and host_config.get("NetworkMode") == "bridge"
+            and host_config.get("NetworkMode") == expected_network_mode
             and set(host_config.get("CapDrop", []) or []) == {"ALL"}
             and any("no-new-privileges" in option for option in security_options)
         )

@@ -205,6 +205,29 @@ def test_manager_creates_hardened_thread_container(tmp_path: Path, monkeypatch) 
     }
 
 
+def test_network_is_enabled_by_default(monkeypatch) -> None:
+    monkeypatch.delenv("ZHARNESS_SANDBOX_NETWORK", raising=False)
+
+    settings = DockerSandboxSettings.from_env()
+
+    assert settings.network_enabled is True
+
+
+def test_network_can_be_disabled(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("ZHARNESS_HOME", str(tmp_path))
+    monkeypatch.setenv("ZHARNESS_SANDBOX_NETWORK", "false")
+    containers = FakeContainers()
+    manager = DockerSandboxManager(
+        client=SimpleNamespace(containers=containers),
+        settings=DockerSandboxSettings.from_env(),
+    )
+
+    manager.for_thread("thread-one")
+
+    assert containers.run_options is not None
+    assert containers.run_options["network_mode"] == "none"
+
+
 def test_manager_creates_container_without_skills_mount(
     tmp_path: Path, monkeypatch
 ) -> None:

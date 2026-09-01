@@ -87,6 +87,7 @@ ZHARNESS_HOME=/absolute/path/to/zharness-data
 | --- | --- | --- |
 | `ZHARNESS_SANDBOX_IMAGE` | `zharness-sandbox:latest` | 沙箱镜像名称 |
 | `ZHARNESS_SANDBOX_MEMORY` | `512m` | 单个容器内存限制 |
+| `ZHARNESS_SANDBOX_NETWORK` | 开启 | Docker 沙箱网络访问；设为 `0`、`false` 或 `no` 时关闭 |
 | `ZHARNESS_SANDBOX_USER` | 服务进程 UID/GID | 容器运行用户，例如 `1000:1000` |
 | `LANGSMITH_TRACING` | 未启用 | 是否启用 LangSmith tracing |
 | `LANGSMITH_API_KEY` | 无 | LangSmith API Key |
@@ -164,5 +165,6 @@ ZHARNESS_RUN_DOCKER_TESTS=1 uv run pytest zharness/tests/test_docker_integration
 - 工作区文件工具面向 UTF-8 文本，与 Shell 命令共用同一个 Docker 沙箱；沙箱传输的
   默认单文件上限为 16 MiB。
 - Shell 命令最长运行 300 秒，保留输出默认最多 1 MiB。
-- Docker 沙箱没有网络，无法在运行期间下载依赖。
+- Docker 沙箱默认通过 bridge 网络访问外部网络；根文件系统只读，因此运行时依赖需安装到
+  `/workspace` 或预置在沙箱镜像中。
 - `gateway` 尚未实现鉴权、转发或业务 API。

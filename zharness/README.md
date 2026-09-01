@@ -95,7 +95,7 @@ first file or command tool runs. The thread workspace is mapped to the virtual
 root `/`; the sandbox is constrained as follows:
 
 - read-only root filesystem;
-- host-network access;
+- network access through Docker's default bridge;
 - all Linux capabilities dropped;
 - `no-new-privileges` enabled;
 - a `tmpfs` at `/tmp` with `nosuid`, `nodev`, and `noexec`;
@@ -108,7 +108,8 @@ docker build -f docker/sandbox.Dockerfile -t zharness-sandbox:latest .
 ```
 
 The sandbox image includes Python, uv, Git, GNU Coreutils, Findutils, Grep,
-Ripgrep, curl, wget, and C build tools. The container has host-network access,
+Ripgrep, curl, wget, and C build tools. The container has network access through
+Docker's default bridge,
 so dependencies can be installed at runtime, but the root filesystem is
 read-only, so dependencies must be installed into `/workspace` to survive
 container recreation.
@@ -128,6 +129,7 @@ Sandbox environment variables:
 | `ZHARNESS_SANDBOX_PROVIDER` | `docker` | Sandbox backend: `docker` or `local` |
 | `ZHARNESS_SANDBOX_IMAGE` | `zharness-sandbox:latest` | Docker image name |
 | `ZHARNESS_SANDBOX_MEMORY` | `512m` | Container memory limit |
+| `ZHARNESS_SANDBOX_NETWORK` | Enabled | Docker sandbox network access; set to `0`/`false`/`no` to disable |
 | `ZHARNESS_SANDBOX_USER` | Server process UID/GID | Container user, for example `1000:1000` |
 | `ZHARNESS_HOME` | `./.zharness` | Parent directory for thread workspaces |
 | `ZHARNESS_LOCAL_ROOT` | None | Local sandbox root shared by every thread (otherwise each thread gets `ZHARNESS_HOME/workspaces/<thread_id>`) |
