@@ -22,6 +22,16 @@ future gateway layer.
 - Pluggable sandbox providers: hardened Docker containers by default, or a
   local filesystem sandbox (`ZHARNESS_SANDBOX_PROVIDER=local`) for trusted
   local projects.
+- Human approval is required before a shell command runs
+  (`execute_command` interrupts the run for an explicit approve/reject
+  decision).
+- Skill discovery: bundled `SKILL.md` packages are exposed through a read-only
+  `/mnt/skills` mount and a deferred `describe_skill` tool that keeps the
+  system prompt compact.
+- Tool failures are formatted for the model and retried automatically before a
+  run gives up.
+- PostgreSQL-backed checkpoint persistence with an idempotent setup and a
+  managed Compose service for local development.
 - Todo-based planning for multi-step tasks and automatic summarization of long
   conversations.
 - Sandbox cleanup when a thread is deleted, and graceful command shutdown when
@@ -36,12 +46,17 @@ future gateway layer.
 ├── gateway/                  # Placeholder for a future external gateway
 ├── scripts/
 │   ├── cleanup.py            # Remove sessions, workspaces, and sandboxes
+│   ├── server.sh             # Server and PostgreSQL lifecycle helpers
 │   └── smoke_server.py       # End-to-end server smoke test
+├── skills/                   # Bundled SKILL.md packages (public)
 ├── zharness/                 # Agent, tools, workspace, and sandbox runtime
 ├── langgraph.json            # LangGraph graph and HTTP application config
 ├── pyproject.toml            # uv workspace configuration
 └── uv.lock                   # Locked Python dependencies
 ```
+
+Runtime data (thread workspaces, server logs) lives under `ZHARNESS_HOME`,
+which defaults to `.zharness` in the current working directory.
 
 ## How It Works
 
@@ -61,6 +76,8 @@ future gateway layer.
 The `/` path exposed to agent tools is the current thread's virtual workspace
 root, not the operating-system root. In the Docker provider it maps to
 `/workspace`; in the local provider it maps to the configured host directory.
+Installed skills are mounted read-only at `/mnt/skills` and are not part of the
+user workspace.
 
 ## Sandbox Providers
 
@@ -106,8 +123,9 @@ Skip this step only when using the local provider.
 
 ### 3. Configure environment variables
 
-`langgraph.json` loads `zharness/.env` by default. Create that file and define at
-least the following variables:
+`langgraph.json` loads `zharness/.env` by default. Copy the committed template
+`zharness/.env.example` to `zharness/.env` and adjust it, defining at least the
+following variables:
 
 ```dotenv
 ZHARNESS_MODEL=deepseek-chat
@@ -173,9 +191,11 @@ Optional settings:
 | `ZHARNESS_SANDBOX_PROVIDER` | `docker` | Sandbox backend: `docker` or `local` |
 | `ZHARNESS_SANDBOX_IMAGE` | `zharness-sandbox:latest` | Sandbox image name |
 | `ZHARNESS_SANDBOX_MEMORY` | `512m` | Memory limit per container |
+| `ZHARNESS_SANDBOX_NETWORK` | Enabled | Docker sandbox network access; set to `0`, `false`, or `no` to disable |
 | `ZHARNESS_SANDBOX_USER` | Server process UID/GID | Container user, for example `1000:1000` |
 | `ZHARNESS_LOCAL_ROOT` | Per-thread workspace | Host directory used by every thread with the local provider |
 | `ZHARNESS_ALLOW_HOST_BASH` | Disabled | Allow the local provider to execute host shell commands (`1`, `true`, or `yes`) |
+| `ZHARNESS_SKILLS_PATH` | `<ZHARNESS_HOME>/skills`, then the repo `skills/` | Override the directory that contains installed `SKILL.md` packages |
 | `ZHARNESS_MODEL_PROVIDER` | Inferred from model name | Model provider: `deepseek`, `openai`, or `anthropic` |
 | `ZHARNESS_OPENAI_BASE_URL` | None | Base URL for OpenAI-compatible endpoints (Ollama, vLLM, etc.) |
 | `ZHARNESS_ANTHROPIC_BASE_URL` | None | Base URL override for the Anthropic provider |
@@ -219,8 +239,8 @@ uv run python scripts/smoke_server.py
 ```
 
 With the default provider, the script verifies workspace reads, file writes and
-edits, Todo-based task planning, Docker command execution, and the workspace
-mount.
+edits, Todo-based task planning, the approval interruption before `execute_command`
+runs, and the workspace mount during Docker command execution.
 
 ### 6. Clean up runtime data
 
@@ -270,6 +290,8 @@ ZHARNESS_RUN_DOCKER_TESTS=1 uv run pytest zharness/tests/test_docker_integration
 - The model factory supports DeepSeek, OpenAI (including OpenAI-compatible
   endpoints), and Anthropic providers, selected with
   `ZHARNESS_MODEL_PROVIDER`.
+- `execute_command` always pauses the run for an explicit user approval before
+  the command is executed, so it cannot run fully unattended.
 - Workspace file tools operate on UTF-8 text through the same sandbox as shell
   commands. Docker transfers default to a 16 MiB per-file limit; local file
   operations default to 256 KiB.
@@ -278,6 +300,8 @@ ZHARNESS_RUN_DOCKER_TESTS=1 uv run pytest zharness/tests/test_docker_integration
 - Docker sandboxes have network access through the host bridge, but the root
   filesystem is read-only, so runtime dependencies must be installed into
   `/workspace` or baked into the sandbox image.
+- Skills are mounted read-only at `/mnt/skills`; the agent can read them but
+  never writes into that namespace.
 - The local sandbox provider is intended for single-user, trusted local
   environments only. Host bash execution is disabled unless
   `ZHARNESS_ALLOW_HOST_BASH=1` is set explicitly, and enabling it runs commands
