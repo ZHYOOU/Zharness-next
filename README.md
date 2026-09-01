@@ -142,12 +142,19 @@ ZHARNESS_LOCAL_ROOT=/absolute/path/to/project
 ### 4. Start the development server
 
 ```bash
-uv run langgraph dev
+make start
 ```
 
 The default server address is `http://127.0.0.1:2024`. You can interact with it
 through LangGraph Studio or use the LangGraph SDK to create threads and run
-`lead_agent`.
+`lead_agent`. Use `make logs` to follow the background server logs, `make status`
+to inspect its state, and `make stop` to stop it. The bind address and port can
+be overridden with `ZHARNESS_SERVER_HOST` and `ZHARNESS_SERVER_PORT`. When the
+Docker sandbox provider is selected (the default), `make start` also verifies
+that Docker is installed, running, and accessible before starting the server.
+The check times out after five seconds if Docker is paused or unresponsive.
+Use `make dev` instead to run the server in the foreground and stop it with
+`Ctrl+C`; it performs the same startup checks.
 
 ### 5. Run the smoke test
 
@@ -169,7 +176,7 @@ repository root:
 
 ```bash
 uv run --package zharness python scripts/cleanup.py --dry-run   # preview
-uv run --package zharness python scripts/cleanup.py -y          # apply
+make clean
 ```
 
 You can limit what gets cleaned with `--sessions`, `--workspaces`, and
@@ -177,6 +184,9 @@ You can limit what gets cleaned with `--sessions`, `--workspaces`, and
 image with `--remove-image`. Use `--dry-run` to preview, and `-y` to skip the
 confirmation prompt (required for non-interactive use). The server recreates all
 of this state on demand, so it is safe to run while the server is stopped.
+
+Run `make help` to list all project commands. Use `make clean-dry-run` to preview
+the default cleanup through the Makefile.
 
 ## Development and Testing
 

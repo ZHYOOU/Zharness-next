@@ -97,11 +97,16 @@ ZHARNESS_HOME=/absolute/path/to/zharness-data
 ### 4. 启动开发服务
 
 ```bash
-uv run langgraph dev
+make start
 ```
 
 默认服务地址为 `http://127.0.0.1:2024`。可在 LangGraph Studio 中交互，也可以通过
-LangGraph SDK 创建 thread 并运行 `lead_agent`。
+LangGraph SDK 创建 thread 并运行 `lead_agent`。使用 `make logs` 持续查看后台日志，
+`make status` 检查运行状态，使用 `make stop` 停止服务。可通过
+`ZHARNESS_SERVER_HOST` 和 `ZHARNESS_SERVER_PORT` 覆盖监听地址与端口。选择 Docker
+沙箱（默认配置）时，`make start` 还会在启动服务前确认 Docker 已安装、正在运行且当前
+用户可以访问。如果 Docker 被暂停或无响应，检查会在五秒后超时退出。如需在前台运行，
+使用 `make dev`，然后按 `Ctrl+C` 停止；该命令执行相同的启动检查。
 
 ### 5. 运行冒烟验证
 
@@ -121,13 +126,16 @@ uv run python scripts/smoke_server.py
 
 ```bash
 uv run --package zharness python scripts/cleanup.py --dry-run   # 预览将删除的内容
-uv run --package zharness python scripts/cleanup.py -y          # 执行清理
+make clean
 ```
 
 可以通过 `--sessions`、`--workspaces`、`--sandboxes` 限定要清理的内容，加
 `--caches` 同时清理 Python/静态检查缓存，加 `--remove-image` 一并删除沙箱镜像。
 使用 `--dry-run` 预览，`-y` 跳过确认提示（非交互环境必须加上）。服务会在需要时重新
 创建这些状态，因此即使服务已停止也可以安全执行。
+
+运行 `make help` 可查看全部项目命令；通过 Makefile 预览默认清理内容时，可使用
+`make clean-dry-run`。
 
 ## 开发与测试
 
