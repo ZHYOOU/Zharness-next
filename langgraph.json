@@ -3,10 +3,10 @@
     "./zharness"
   ],
   "graphs": {
-    "lead_agent": "./zharness/src/zharness/graph.py:graph"
+    "lead_agent": "./zharness/src/zharness/server/graph.py:graph"
   },
   "http": {
-    "app": "./zharness/src/zharness/http.py:app"
+    "app": "./zharness/src/zharness/server/http.py:app"
   },
   "env": "./zharness/.env"
 }

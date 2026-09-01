@@ -1,9 +1,9 @@
 from langchain.tools import ToolRuntime, tool
 
+from zharness.host.paths import WorkspacePathError
 from zharness.sandbox.manager import SandboxUnavailableError, get_sandbox_manager
 from zharness.sandbox.protocol import FileInfo, GrepMatch
 from zharness.sandbox.workspace import SandboxWorkspace, SandboxWorkspaceError
-from zharness.workspace.paths import WorkspacePathError
 
 
 def _runtime_workspace(runtime: ToolRuntime) -> SandboxWorkspace:

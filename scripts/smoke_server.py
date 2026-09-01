@@ -3,7 +3,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from langgraph_sdk import get_client
-from zharness.workspace.paths import ensure_thread_workspace
+from zharness.host.paths import ensure_thread_workspace
 
 ZHARNESS_ENV_FILE = Path(__file__).resolve().parents[1] / "zharness" / ".env"
 load_dotenv(ZHARNESS_ENV_FILE, override=False)

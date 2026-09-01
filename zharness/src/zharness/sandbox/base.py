@@ -1,7 +1,7 @@
 """Base sandbox implementation.
 
-[`BaseSandbox`][deepagents.backends.sandbox.BaseSandbox] implements
-[`SandboxBackendProtocol`][deepagents.backends.protocol.SandboxBackendProtocol].
+[`BaseSandbox`][zharness.sandbox.base.BaseSandbox] implements
+[`SandboxBackendProtocol`][zharness.sandbox.protocol.SandboxBackendProtocol].
 
 File listing, grep, glob, and read use shell commands via `execute()`. Write
 delegates content transfer to `upload_files()`. Edit uses server-side `execute()`
@@ -10,6 +10,15 @@ strings as temp files with a server-side replace script for larger ones.
 
 Concrete subclasses implement `execute()` and `upload_files()`; all other
 operations are derived from those.
+
+BaseSandbox 基类实现。实现
+[`SandboxBackendProtocol`][zharness.sandbox.protocol.SandboxBackendProtocol]。
+
+文件列举、grep、glob 与读取通过 `execute()` 使用 shell 命令。写入委托给
+`upload_files()` 传输内容。编辑在负载小于 `_EDIT_INLINE_MAX_BYTES` 时使用服务端
+`execute()`；更大的负载则把 old/new 字符串作为临时文件上传，再由服务端替换脚本处理。
+
+具体子类实现 `execute()` 和 `upload_files()`；其余操作均由二者派生。
 """
 
 from __future__ import annotations

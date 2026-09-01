@@ -28,6 +28,7 @@ from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Final
 
+from zharness.host.paths import ensure_thread_workspace
 from zharness.sandbox.protocol import (
     FILE_NOT_FOUND,
     INVALID_PATH,
@@ -52,7 +53,6 @@ from zharness.utils import (
     compile_grep_include_glob,
     slice_read_response,
 )
-from zharness.workspace.paths import ensure_thread_workspace
 
 logger = logging.getLogger(__name__)
 

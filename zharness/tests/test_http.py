@@ -2,9 +2,8 @@ from types import SimpleNamespace
 
 import pytest
 from starlette.types import Message, Receive, Scope, Send
-from zharness.http import ThreadSandboxCleanupMiddleware, lifespan
-
-from zharness import http as http_module
+from zharness.server import http as http_module
+from zharness.server.http import ThreadSandboxCleanupMiddleware, lifespan
 
 
 class FakeManager:

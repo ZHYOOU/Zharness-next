@@ -20,8 +20,8 @@ import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
+from zharness.host.paths import zharness_home
 from zharness.sandbox.manager import DEFAULT_IMAGE, SANDBOX_LABEL
-from zharness.workspace.paths import zharness_home
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ENV_FILE = REPO_ROOT / "zharness" / ".env"

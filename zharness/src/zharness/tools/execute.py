@@ -2,8 +2,8 @@
 
 from langchain.tools import ToolRuntime, tool
 
+from zharness.host.paths import WorkspacePathError
 from zharness.sandbox.manager import SandboxUnavailableError, get_sandbox_manager
-from zharness.workspace.paths import WorkspacePathError
 
 MAX_COMMAND_CHARS = 128 * 1024
 MAX_TIMEOUT_SECONDS = 300

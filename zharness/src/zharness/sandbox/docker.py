@@ -10,6 +10,7 @@ from typing import Any, Final
 
 from docker.errors import APIError, DockerException
 
+from zharness.sandbox.base import BaseSandbox
 from zharness.sandbox.protocol import (
     FILE_NOT_FOUND,
     INVALID_PATH,
@@ -19,7 +20,6 @@ from zharness.sandbox.protocol import (
     FileDownloadResponse,
     FileUploadResponse,
 )
-from zharness.sandbox.sandbox import BaseSandbox
 
 DEFAULT_MAX_OUTPUT_BYTES: Final = 1024 * 1024
 DEFAULT_MAX_TRANSFER_BYTES: Final = 16 * 1024 * 1024

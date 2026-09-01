@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import pytest
-from zharness.workspace.paths import (
+from zharness.host.paths import (
     WorkspacePathError,
     ensure_thread_workspace,
     thread_workspace_path,

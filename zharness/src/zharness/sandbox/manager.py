@@ -12,8 +12,8 @@ from typing import Any, Final
 from docker.errors import APIError, DockerException, NotFound
 
 import docker
+from zharness.host.paths import ensure_thread_workspace, thread_workspace_path
 from zharness.sandbox.docker import DockerSandbox
-from zharness.workspace.paths import ensure_thread_workspace, thread_workspace_path
 
 SANDBOX_LABEL: Final = "zharness.sandbox"
 THREAD_LABEL: Final = "zharness.thread_id"

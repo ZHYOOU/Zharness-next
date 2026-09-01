@@ -13,7 +13,7 @@ from zharness.skills.constants import (
 )
 from zharness.skills.parser import parse_skill_file
 from zharness.skills.types import Skill, SkillCategory
-from zharness.workspace.paths import WorkspacePathError, zharness_home
+from zharness.host.paths import WorkspacePathError, zharness_home
 
 logger = logging.getLogger(__name__)
 
