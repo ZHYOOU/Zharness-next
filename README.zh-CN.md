@@ -47,7 +47,7 @@ Agent 工具中的 `/` 是当前 thread 的虚拟工作区根目录，并非宿�
 
 ## 环境要求
 
-- Python 3.14 或更高版本
+- Python 3.13 或更高版本
 - [uv](https://docs.astral.sh/uv/)
 - Docker Engine（文件和命令执行功能需要）
 - 所选模型提供商（DeepSeek、OpenAI 或 Anthropic）对应的 API Key
@@ -80,7 +80,32 @@ ZHARNESS_MODEL=deepseek-chat
 ZHARNESS_MODEL_PROVIDER=deepseek
 DEEPSEEK_API_KEY=your-api-key
 ZHARNESS_HOME=/absolute/path/to/zharness-data
+ZHARNESS_POSTGRES_URI=postgresql://zharness:change-me@127.0.0.1:5432/zharness
+LANGGRAPH_STRICT_MSGPACK=true
 ```
+
+服务通过 `ZHARNESS_POSTGRES_URI` 创建全局 `AsyncPostgresSaver`。服务启动时会执行
+幂等的检查点表迁移，并保持数据库连接直到服务关闭。`make start` 和 `make dev` 会自动
+启动 `docker-compose.yml` 中的 PostgreSQL，并等待健康检查通过后再启动 LangGraph。
+Compose 默认账号与上面的 URI 一致，可以通过以下变量配置：
+
+```dotenv
+ZHARNESS_POSTGRES_MANAGED=true
+ZHARNESS_POSTGRES_USER=zharness
+ZHARNESS_POSTGRES_PASSWORD=change-me
+ZHARNESS_POSTGRES_DB=zharness
+ZHARNESS_POSTGRES_PORT=5432
+```
+
+这些变量需要与 `ZHARNESS_POSTGRES_URI` 保持一致；也可以省略 URI，让程序根据托管
+Compose 配置自动生成。使用外部 PostgreSQL 时设置 `ZHARNESS_POSTGRES_MANAGED=false`，
+此时必须提供显式 URI。`make stop` 会停止 Compose 容器，但保留数据库命名卷。也可以
+使用 `make postgres-start`、`make postgres-stop` 和
+`make postgres-logs` 单独管理数据库。
+
+后续运行传入相同的 LangGraph `thread_id` 即可恢复持久化的会话状态。通过 LangGraph
+API 删除 thread 时，其检查点也会一并删除。`make clean` 不会删除外部 PostgreSQL
+中的数据；需要通过 API 删除 thread，或为数据库单独配置数据保留策略。
 
 提供商由 `ZHARNESS_MODEL_PROVIDER` 选择，未设置时根据模型名推断：以 `claude`
 开头的模型使用 Anthropic，以 `deepseek` 开头的模型使用 DeepSeek，其余默认使用
@@ -146,8 +171,8 @@ uv run python scripts/smoke_server.py
 
 ### 6. 清理运行数据
 
-如需重置全部运行时状态——LangGraph 会话历史、各线程工作区以及 Docker 沙箱容器——
-请在项目根目录执行清理脚本：
+如需清理本地 Agent Server 元数据、各线程工作区以及 Docker 沙箱容器，请在项目根目录
+执行清理脚本：
 
 ```bash
 uv run --package zharness python scripts/cleanup.py --dry-run   # 预览将删除的内容
@@ -156,8 +181,8 @@ make clean
 
 可以通过 `--sessions`、`--workspaces`、`--sandboxes` 限定要清理的内容，加
 `--caches` 同时清理 Python/静态检查缓存，加 `--remove-image` 一并删除沙箱镜像。
-使用 `--dry-run` 预览，`-y` 跳过确认提示（非交互环境必须加上）。服务会在需要时重新
-创建这些状态，因此即使服务已停止也可以安全执行。
+使用 `--dry-run` 预览，`-y` 跳过确认提示（非交互环境必须加上）。PostgreSQL 检查点
+不会被该脚本删除；请通过 API 删除对应 thread，或单独清理数据库。
 
 运行 `make help` 可查看全部项目命令；通过 Makefile 预览默认清理内容时，可使用
 `make clean-dry-run`。

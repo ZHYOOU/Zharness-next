@@ -294,7 +294,7 @@ class LocalSandbox(SandboxBackendProtocol):
                     resolved = child.resolve(strict=True)
                     self._assert_within_mount(resolved)
                     stat = child.stat()
-                except ValueError, OSError, RuntimeError:
+                except (ValueError, OSError, RuntimeError):
                     continue
                 is_dir = child.is_dir()
                 if not is_dir and not child.is_file():
@@ -452,7 +452,7 @@ class LocalSandbox(SandboxBackendProtocol):
             lexical.parent.resolve(strict=True).relative_to(self.root)
         except ValueError as exc:
             return DeleteResult(error=f"Path escapes the workspace: {exc}")
-        except OSError, RuntimeError:
+        except (OSError, RuntimeError):
             return DeleteResult(error=f"Invalid workspace path: {file_path}")
 
         if lexical.is_symlink():
@@ -497,7 +497,7 @@ class LocalSandbox(SandboxBackendProtocol):
                     continue
                 try:
                     self._assert_within_mount(candidate.resolve(strict=True))
-                except ValueError, OSError, RuntimeError:
+                except (ValueError, OSError, RuntimeError):
                     continue
                 relative = candidate.relative_to(base).as_posix()
                 if not matcher(relative):
@@ -507,7 +507,7 @@ class LocalSandbox(SandboxBackendProtocol):
                         matches=matches, truncated=True, truncation_reason="budget"
                     )
                 matches.append({"path": self._sandbox_path(candidate)})
-        except OSError, ValueError:
+        except (OSError, ValueError):
             return GlobResult(error=f"Invalid glob pattern: {pattern}")
         return GlobResult(matches=matches)
 
@@ -571,7 +571,7 @@ class LocalSandbox(SandboxBackendProtocol):
                                     "text": line.rstrip("\r\n"),
                                 }
                             )
-                except UnicodeDecodeError, OSError, ValueError:
+                except (UnicodeDecodeError, OSError, ValueError):
                     continue
         except OSError:
             return GrepResult(error=f"Could not search path: {path}")

@@ -1,9 +1,13 @@
 {
+  "python_version": "3.13",
   "dependencies": [
     "./zharness"
   ],
   "graphs": {
     "lead_agent": "./zharness/src/zharness/server/graph.py:graph"
+  },
+  "checkpointer": {
+    "path": "./zharness/src/zharness/server/checkpointer.py:create_postgres_checkpointer"
   },
   "http": {
     "app": "./zharness/src/zharness/server/http.py:app"

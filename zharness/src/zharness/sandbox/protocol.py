@@ -945,7 +945,7 @@ def _method_accepts_max_count(
     """Check whether a backend method accepts the optional `max_count` keyword."""
     try:
         sig = inspect.signature(getattr(cls, method_name))
-    except AttributeError, ValueError, TypeError:
+    except (AttributeError, ValueError, TypeError):
         logger.warning(
             "Could not inspect signature of %s.%s; assuming max_count is not supported. "
             "The cap will be enforced after the search instead of bounding it, so a huge "
@@ -973,7 +973,7 @@ def execute_accepts_timeout(cls: type[SandboxBackendProtocol]) -> bool:
     """
     try:
         sig = inspect.signature(cls.execute)
-    except ValueError, TypeError:
+    except (ValueError, TypeError):
         logger.warning(
             "Could not inspect signature of %s.execute; assuming timeout is not supported. This may indicate a backend packaging issue.",
             cls.__qualname__,

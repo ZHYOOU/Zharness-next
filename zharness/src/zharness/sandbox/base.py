@@ -921,7 +921,7 @@ def _parse_read_output(output: str, file_path: str) -> ReadResult:
     output = output.rstrip()
     try:
         data = json.loads(output)
-    except json.JSONDecodeError, ValueError:
+    except (json.JSONDecodeError, ValueError):
         detail = output[:200] if output else "(empty)"
         return ReadResult(
             error=f"File '{file_path}': unexpected server response: {detail}"
@@ -1284,7 +1284,7 @@ def _parse_edit_output(output: str, file_path: str, old_string: str) -> EditResu
     output = output.rstrip()
     try:
         data = json.loads(output)
-    except json.JSONDecodeError, ValueError:
+    except (json.JSONDecodeError, ValueError):
         detail = output[:200] if output else "(empty)"
         return EditResult(
             error=f"Error editing file '{file_path}': unexpected server response: {detail}"
@@ -1869,7 +1869,7 @@ class BaseSandbox(SandboxBackendProtocol, ABC):
 
         try:
             data = json.loads(output)
-        except json.JSONDecodeError, ValueError:
+        except (json.JSONDecodeError, ValueError):
             # Script may not have started or its finally block may not have
             # run — best-effort cleanup of temp files.
             cleanup = self.execute(
@@ -1934,7 +1934,7 @@ class BaseSandbox(SandboxBackendProtocol, ABC):
 
         try:
             data = json.loads(output)
-        except json.JSONDecodeError, ValueError:
+        except (json.JSONDecodeError, ValueError):
             cleanup = await self.aexecute(
                 f"rm -f {shlex.quote(old_tmp)} {shlex.quote(new_tmp)}"
             )

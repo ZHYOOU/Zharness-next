@@ -77,7 +77,7 @@ host bash gives the agent the permissions of the ZHarness server process.
 
 ## Requirements
 
-- Python 3.14 or later
+- Python 3.13 or later
 - [uv](https://docs.astral.sh/uv/)
 - Docker Engine when using the default Docker sandbox
 - An API key for your chosen model provider (DeepSeek, OpenAI, or Anthropic)
@@ -114,7 +114,37 @@ ZHARNESS_MODEL=deepseek-chat
 ZHARNESS_MODEL_PROVIDER=deepseek
 DEEPSEEK_API_KEY=your-api-key
 ZHARNESS_HOME=/absolute/path/to/zharness-data
+ZHARNESS_POSTGRES_URI=postgresql://zharness:change-me@127.0.0.1:5432/zharness
+LANGGRAPH_STRICT_MSGPACK=true
 ```
+
+`ZHARNESS_POSTGRES_URI` is used by the server-wide
+`AsyncPostgresSaver`. At startup, the server applies the idempotent checkpoint
+migrations and keeps the connection open until shutdown. `make start` and
+`make dev` automatically start the PostgreSQL service defined in
+`docker-compose.yml` and wait for its health check before starting LangGraph.
+The default Compose credentials match the URI above and can be configured with:
+
+```dotenv
+ZHARNESS_POSTGRES_MANAGED=true
+ZHARNESS_POSTGRES_USER=zharness
+ZHARNESS_POSTGRES_PASSWORD=change-me
+ZHARNESS_POSTGRES_DB=zharness
+ZHARNESS_POSTGRES_PORT=5432
+```
+
+Keep these values consistent with `ZHARNESS_POSTGRES_URI`, or omit the URI to
+derive it from the managed Compose settings. Set `ZHARNESS_POSTGRES_MANAGED=false`
+when using an externally managed database; an explicit URI is required then.
+`make stop` stops the Compose container but retains its named volume. The
+database can also be managed independently with `make postgres-start`,
+`make postgres-stop`, and `make postgres-logs`.
+
+Use the same LangGraph `thread_id` on subsequent runs to resume its persisted
+conversation state. Deleting a thread through the LangGraph API also deletes
+its checkpoints. `make clean` does not delete rows from an external PostgreSQL
+database; delete threads through the API or apply a separate database retention
+policy.
 
 The provider is selected by `ZHARNESS_MODEL_PROVIDER` and inferred from the
 model name when unset: names starting with `claude` use Anthropic, names
@@ -195,9 +225,8 @@ mount.
 
 ### 6. Clean up runtime data
 
-To reset runtime state — LangGraph session history, managed per-thread
-workspaces, and Docker sandbox containers — run the cleanup script from the
-repository root:
+To remove local Agent Server metadata, managed per-thread workspaces, and
+Docker sandbox containers, run the cleanup script from the repository root:
 
 ```bash
 uv run --package zharness python scripts/cleanup.py --dry-run   # preview
@@ -207,8 +236,9 @@ make clean
 You can limit what gets cleaned with `--sessions`, `--workspaces`, and
 `--sandboxes`, add Python/lint caches with `--caches`, or also delete the sandbox
 image with `--remove-image`. Use `--dry-run` to preview, and `-y` to skip the
-confirmation prompt (required for non-interactive use). The server recreates all
-of this state on demand, so it is safe to run while the server is stopped.
+confirmation prompt (required for non-interactive use). PostgreSQL checkpoints
+are intentionally excluded; delete their threads through the API or clean the
+database separately.
 
 Run `make help` to list all project commands. Use `make clean-dry-run` to preview
 the default cleanup through the Makefile.

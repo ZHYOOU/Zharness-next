@@ -8,6 +8,7 @@ RUNTIME_DIR="${REPO_ROOT}/.zharness"
 PID_FILE="${RUNTIME_DIR}/server.pid"
 LOG_FILE="${RUNTIME_DIR}/server.log"
 ENV_FILE="${REPO_ROOT}/zharness/.env"
+COMPOSE_FILE="${REPO_ROOT}/docker-compose.yml"
 SERVER_HOST="${ZHARNESS_SERVER_HOST:-127.0.0.1}"
 SERVER_PORT="${ZHARNESS_SERVER_PORT:-2024}"
 
@@ -27,10 +28,30 @@ configured_sandbox_provider() {
     )
 }
 
+managed_postgres_enabled() {
+    local configured
+    configured="$(
+        cd "${REPO_ROOT}"
+        uv run --package zharness python -c \
+            'import os, sys; from dotenv import load_dotenv; load_dotenv(sys.argv[1], override=False); print(os.environ.get("ZHARNESS_POSTGRES_MANAGED", "true").lower())' \
+            "${ENV_FILE}"
+    )"
+    [[ "${configured}" != "0" && "${configured}" != "false" && \
+        "${configured}" != "no" && "${configured}" != "off" ]]
+}
+
+run_compose() {
+    if [[ -f "${ENV_FILE}" ]]; then
+        docker compose --env-file "${ENV_FILE}" --file "${COMPOSE_FILE}" "$@"
+    else
+        docker compose --file "${COMPOSE_FILE}" "$@"
+    fi
+}
+
 check_docker() {
     local provider
     provider="$(configured_sandbox_provider)"
-    if [[ "${provider}" == "local" ]]; then
+    if [[ "${provider}" == "local" ]] && ! managed_postgres_enabled; then
         return 0
     fi
 
@@ -40,6 +61,10 @@ check_docker() {
     fi
     if ! command -v timeout >/dev/null 2>&1; then
         printf 'Docker sandbox is enabled, but the timeout command is unavailable.\n' >&2
+        return 1
+    fi
+    if managed_postgres_enabled && ! docker compose version >/dev/null 2>&1; then
+        printf 'Managed PostgreSQL requires the Docker Compose plugin.\n' >&2
         return 1
     fi
 
@@ -57,6 +82,34 @@ check_docker() {
         printf 'Start Docker and verify that `docker info` succeeds, then retry.\n' >&2
     fi
     return 1
+}
+
+start_postgres() {
+    if ! managed_postgres_enabled; then
+        return 0
+    fi
+    (
+        cd "${REPO_ROOT}"
+        run_compose up --detach --wait --wait-timeout 60 postgres
+    )
+    printf 'PostgreSQL is ready.\n'
+}
+
+stop_postgres() {
+    if ! managed_postgres_enabled; then
+        return 0
+    fi
+    (
+        cd "${REPO_ROOT}"
+        run_compose stop postgres
+    )
+}
+
+show_postgres_logs() {
+    (
+        cd "${REPO_ROOT}"
+        run_compose logs --follow postgres
+    )
 }
 
 check_start_requirements() {
@@ -79,19 +132,21 @@ dev_server() {
 
     rm -f "${PID_FILE}"
     check_start_requirements
+    start_postgres
     cd "${REPO_ROOT}"
     exec uv run langgraph dev --no-browser \
         --host "${SERVER_HOST}" --port "${SERVER_PORT}"
 }
 
 start_server() {
+    check_start_requirements
+    start_postgres
     if is_running; then
         printf 'ZHarness is already running (PID %s).\n' "$(<"${PID_FILE}")"
         return 0
     fi
 
     rm -f "${PID_FILE}"
-    check_start_requirements
 
     mkdir -p "${RUNTIME_DIR}"
     (
@@ -177,9 +232,11 @@ case "${1:-}" in
         ;;
     stop)
         stop_server
+        stop_postgres
         ;;
     restart)
         stop_server
+        stop_postgres
         start_server
         ;;
     status)
@@ -188,8 +245,18 @@ case "${1:-}" in
     logs)
         show_logs
         ;;
+    postgres-start)
+        check_start_requirements
+        start_postgres
+        ;;
+    postgres-stop)
+        stop_postgres
+        ;;
+    postgres-logs)
+        show_postgres_logs
+        ;;
     *)
-        printf 'Usage: %s {dev|start|stop|restart|status|logs}\n' "$0" >&2
+        printf 'Usage: %s {dev|start|stop|restart|status|logs|postgres-start|postgres-stop|postgres-logs}\n' "$0" >&2
         exit 2
         ;;
 esac
