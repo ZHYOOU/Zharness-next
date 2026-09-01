@@ -11,7 +11,7 @@ ZHarness Next 是一个面向 AI 编程场景的 Agent 运行底座。它基于 
 ## 核心能力
 
 - 基于 LangGraph 和 LangChain 构建 Lead Agent。
-- 通过 DeepSeek Chat Model 进行推理和工具调用。
+- 通过 DeepSeek、OpenAI 或 Anthropic Chat Model 进行推理和工具调用。
 - 按 LangGraph `thread_id` 隔离工作区与执行容器。
 - 提供目录浏览、文件读写、精确编辑、删除、Glob 和文本搜索工具。
 - 在可联网、只读根文件系统、受资源限制的 Docker 容器中执行 Shell 命令。
@@ -50,7 +50,7 @@ Agent 工具中的 `/` 是当前 thread 的虚拟工作区根目录，并非宿�
 - Python 3.14 或更高版本
 - [uv](https://docs.astral.sh/uv/)
 - Docker Engine（文件和命令执行功能需要）
-- DeepSeek API Key
+- 所选模型提供商（DeepSeek、OpenAI 或 Anthropic）对应的 API Key
 
 生产或共享环境建议使用 rootless Docker。服务进程需要访问 Docker Engine，但不要
 把 Docker socket 挂载进 Agent 沙箱。
@@ -77,8 +77,29 @@ docker build -f docker/sandbox.Dockerfile -t zharness-sandbox:latest .
 
 ```dotenv
 ZHARNESS_MODEL=deepseek-chat
+ZHARNESS_MODEL_PROVIDER=deepseek
 DEEPSEEK_API_KEY=your-api-key
 ZHARNESS_HOME=/absolute/path/to/zharness-data
+```
+
+提供商由 `ZHARNESS_MODEL_PROVIDER` 选择，未设置时根据模型名推断：以 `claude`
+开头的模型使用 Anthropic，以 `deepseek` 开头的模型使用 DeepSeek，其余默认使用
+OpenAI。例如：
+
+```dotenv
+# OpenAI
+ZHARNESS_MODEL=gpt-4o
+OPENAI_API_KEY=your-api-key
+
+# Anthropic
+ZHARNESS_MODEL=claude-sonnet-4-5
+ANTHROPIC_API_KEY=your-api-key
+
+# OpenAI 兼容端点，例如 Ollama 或 vLLM
+ZHARNESS_MODEL=qwen3
+ZHARNESS_MODEL_PROVIDER=openai
+ZHARNESS_OPENAI_BASE_URL=http://127.0.0.1:11434/v1
+OPENAI_API_KEY=not-needed
 ```
 
 可选配置：
@@ -89,6 +110,9 @@ ZHARNESS_HOME=/absolute/path/to/zharness-data
 | `ZHARNESS_SANDBOX_MEMORY` | `512m` | 单个容器内存限制 |
 | `ZHARNESS_SANDBOX_NETWORK` | 开启 | Docker 沙箱网络访问；设为 `0`、`false` 或 `no` 时关闭 |
 | `ZHARNESS_SANDBOX_USER` | 服务进程 UID/GID | 容器运行用户，例如 `1000:1000` |
+| `ZHARNESS_MODEL_PROVIDER` | 根据模型名推断 | 模型提供商：`deepseek`、`openai` 或 `anthropic` |
+| `ZHARNESS_OPENAI_BASE_URL` | 无 | OpenAI 兼容端点的基础地址（Ollama、vLLM 等） |
+| `ZHARNESS_ANTHROPIC_BASE_URL` | 无 | Anthropic 提供商的基础地址覆盖 |
 | `LANGSMITH_TRACING` | 未启用 | 是否启用 LangSmith tracing |
 | `LANGSMITH_API_KEY` | 无 | LangSmith API Key |
 | `LANGSMITH_PROJECT` | 无 | LangSmith 项目名称 |
@@ -161,7 +185,8 @@ ZHARNESS_RUN_DOCKER_TESTS=1 uv run pytest zharness/tests/test_docker_integration
 
 ## 当前限制
 
-- 模型工厂当前只创建 DeepSeek Chat Model。
+- 模型工厂支持 DeepSeek、OpenAI（含 OpenAI 兼容端点）和 Anthropic 提供商，
+  通过 `ZHARNESS_MODEL_PROVIDER` 选择。
 - 工作区文件工具面向 UTF-8 文本，与 Shell 命令共用同一个 Docker 沙箱；沙箱传输的
   默认单文件上限为 16 MiB。
 - Shell 命令最长运行 300 秒，保留输出默认最多 1 MiB。

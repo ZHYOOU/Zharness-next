@@ -53,15 +53,34 @@ The agent also enables:
 
 ## Model Configuration
 
-`graph.py` reads the model name from `ZHARNESS_MODEL`. The current model factory
-uses `ChatDeepSeek` from `langchain-deepseek`, with a temperature of `0`, a
-60-second request timeout, and up to three retries.
+`graph.py` reads the model name from `ZHARNESS_MODEL`. The model factory
+(`zharness.models.factory`) creates a chat model for the provider selected by
+`ZHARNESS_MODEL_PROVIDER` — `deepseek` (default), `openai`, or `anthropic` —
+with a temperature of `0`, a 60-second request timeout, and up to three
+retries. When the provider is unset it is inferred from the model name:
+`claude*` uses Anthropic, `deepseek*` uses DeepSeek, and anything else uses
+OpenAI. API keys are read from `DEEPSEEK_API_KEY`, `OPENAI_API_KEY`, and
+`ANTHROPIC_API_KEY` respectively. `ZHARNESS_OPENAI_BASE_URL` overrides the
+endpoint for OpenAI-compatible services (Ollama, vLLM, etc.), and
+`ZHARNESS_ANTHROPIC_BASE_URL` overrides the Anthropic endpoint.
 
 Minimum configuration:
 
 ```dotenv
 ZHARNESS_MODEL=deepseek-chat
 DEEPSEEK_API_KEY=your-api-key
+```
+
+Examples for other providers:
+
+```dotenv
+# OpenAI
+ZHARNESS_MODEL=gpt-4o
+OPENAI_API_KEY=your-api-key
+
+# Anthropic
+ZHARNESS_MODEL=claude-sonnet-4-5
+ANTHROPIC_API_KEY=your-api-key
 ```
 
 ## Thread Workspaces

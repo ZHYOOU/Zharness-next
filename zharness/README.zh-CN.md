@@ -51,15 +51,31 @@ Agent 同时启用了：
 
 ## 模型配置
 
-`graph.py` 从 `ZHARNESS_MODEL` 读取模型名称。当前模型工厂使用
-`langchain-deepseek` 的 `ChatDeepSeek`，temperature 为 `0`，请求超时为 60 秒，最多
-重试 3 次。
+`graph.py` 从 `ZHARNESS_MODEL` 读取模型名称。模型工厂（`zharness.models.factory`）
+根据 `ZHARNESS_MODEL_PROVIDER` 选择的提供商创建聊天模型——`deepseek`（默认）、
+`openai` 或 `anthropic`——temperature 为 `0`，请求超时为 60 秒，最多重试 3 次。
+未设置提供商时按模型名推断：`claude*` 使用 Anthropic，`deepseek*` 使用 DeepSeek，
+其余使用 OpenAI。API Key 分别从 `DEEPSEEK_API_KEY`、`OPENAI_API_KEY` 和
+`ANTHROPIC_API_KEY` 读取。`ZHARNESS_OPENAI_BASE_URL` 可覆盖 OpenAI 兼容服务
+（Ollama、vLLM 等）的端点，`ZHARNESS_ANTHROPIC_BASE_URL` 可覆盖 Anthropic 端点。
 
 最低配置如下：
 
 ```dotenv
 ZHARNESS_MODEL=deepseek-chat
 DEEPSEEK_API_KEY=your-api-key
+```
+
+其他提供商示例：
+
+```dotenv
+# OpenAI
+ZHARNESS_MODEL=gpt-4o
+OPENAI_API_KEY=your-api-key
+
+# Anthropic
+ZHARNESS_MODEL=claude-sonnet-4-5
+ANTHROPIC_API_KEY=your-api-key
 ```
 
 ## 线程工作区

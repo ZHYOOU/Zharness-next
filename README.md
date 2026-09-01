@@ -14,7 +14,7 @@ future gateway layer.
 ## Features
 
 - A Lead Agent built with LangGraph and LangChain.
-- Reasoning and tool calling through a DeepSeek chat model.
+- Reasoning and tool calling through DeepSeek, OpenAI, or Anthropic chat models.
 - Thread-scoped workspaces with a shared virtual path model across sandbox
   providers.
 - Tools for directory listing, file reading and writing, exact edits, deletion,
@@ -80,7 +80,7 @@ host bash gives the agent the permissions of the ZHarness server process.
 - Python 3.14 or later
 - [uv](https://docs.astral.sh/uv/)
 - Docker Engine when using the default Docker sandbox
-- A DeepSeek API key
+- An API key for your chosen model provider (DeepSeek, OpenAI, or Anthropic)
 
 Rootless Docker is recommended in production and shared environments. The
 server process needs access to Docker Engine, but the Docker socket must not be
@@ -111,8 +111,30 @@ least the following variables:
 
 ```dotenv
 ZHARNESS_MODEL=deepseek-chat
+ZHARNESS_MODEL_PROVIDER=deepseek
 DEEPSEEK_API_KEY=your-api-key
 ZHARNESS_HOME=/absolute/path/to/zharness-data
+```
+
+The provider is selected by `ZHARNESS_MODEL_PROVIDER` and inferred from the
+model name when unset: names starting with `claude` use Anthropic, names
+starting with `deepseek` use DeepSeek, and everything else uses OpenAI. For
+example:
+
+```dotenv
+# OpenAI
+ZHARNESS_MODEL=gpt-4o
+OPENAI_API_KEY=your-api-key
+
+# Anthropic
+ZHARNESS_MODEL=claude-sonnet-4-5
+ANTHROPIC_API_KEY=your-api-key
+
+# OpenAI-compatible endpoint, e.g. Ollama or vLLM
+ZHARNESS_MODEL=qwen3
+ZHARNESS_MODEL_PROVIDER=openai
+ZHARNESS_OPENAI_BASE_URL=http://127.0.0.1:11434/v1
+OPENAI_API_KEY=not-needed
 ```
 
 Optional settings:
@@ -122,10 +144,12 @@ Optional settings:
 | `ZHARNESS_SANDBOX_PROVIDER` | `docker` | Sandbox backend: `docker` or `local` |
 | `ZHARNESS_SANDBOX_IMAGE` | `zharness-sandbox:latest` | Sandbox image name |
 | `ZHARNESS_SANDBOX_MEMORY` | `512m` | Memory limit per container |
-| `ZHARNESS_SANDBOX_NETWORK` | Enabled | Docker sandbox network access; set to `0`, `false`, or `no` to disable |
 | `ZHARNESS_SANDBOX_USER` | Server process UID/GID | Container user, for example `1000:1000` |
 | `ZHARNESS_LOCAL_ROOT` | Per-thread workspace | Host directory used by every thread with the local provider |
 | `ZHARNESS_ALLOW_HOST_BASH` | Disabled | Allow the local provider to execute host shell commands (`1`, `true`, or `yes`) |
+| `ZHARNESS_MODEL_PROVIDER` | Inferred from model name | Model provider: `deepseek`, `openai`, or `anthropic` |
+| `ZHARNESS_OPENAI_BASE_URL` | None | Base URL for OpenAI-compatible endpoints (Ollama, vLLM, etc.) |
+| `ZHARNESS_ANTHROPIC_BASE_URL` | None | Base URL override for the Anthropic provider |
 | `LANGSMITH_TRACING` | Disabled | Enable LangSmith tracing |
 | `LANGSMITH_API_KEY` | None | LangSmith API key |
 | `LANGSMITH_PROJECT` | None | LangSmith project name |
@@ -214,7 +238,9 @@ ZHARNESS_RUN_DOCKER_TESTS=1 uv run pytest zharness/tests/test_docker_integration
 
 ## Current Limitations
 
-- The model factory currently creates only a DeepSeek chat model.
+- The model factory supports DeepSeek, OpenAI (including OpenAI-compatible
+  endpoints), and Anthropic providers, selected with
+  `ZHARNESS_MODEL_PROVIDER`.
 - Workspace file tools operate on UTF-8 text through the same sandbox as shell
   commands. Docker transfers default to a 16 MiB per-file limit; local file
   operations default to 256 KiB.
