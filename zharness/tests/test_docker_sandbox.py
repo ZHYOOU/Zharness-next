@@ -103,6 +103,19 @@ def test_execute_uses_timeout_workdir_and_output_cap() -> None:
     ]
 
 
+def test_execute_reports_operation_activity() -> None:
+    events: list[str] = []
+    sandbox = DockerSandbox(
+        FakeContainer(),
+        on_operation_start=lambda: events.append("start"),
+        on_operation_end=lambda: events.append("end"),
+    )
+
+    sandbox.execute("true")
+
+    assert events == ["start", "end"]
+
+
 def test_upload_builds_single_safe_archive(monkeypatch) -> None:
     container = FakeContainer()
     sandbox = DockerSandbox(container)
@@ -187,6 +200,9 @@ class FakeContainers:
         self.run_options = options
         self.container = FakeContainer()
         return self.container
+
+    def list(self, **kwargs):
+        return [] if self.container is None else [self.container]
 
 
 class FakeImages:
@@ -354,6 +370,104 @@ def test_manager_reuses_container_with_current_security_policy(
     assert reused.container is current
     assert current.removed is False
     assert containers.run_options is None
+
+
+def test_remove_for_thread_removes_container_and_workspace(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("ZHARNESS_HOME", str(tmp_path))
+    workspace = tmp_path / "workspaces" / "thread-one"
+    workspace.mkdir(parents=True)
+    (workspace / "result.txt").write_text("data", encoding="utf-8")
+    manager = DockerSandboxManager(
+        client=SimpleNamespace(),
+        settings=DockerSandboxSettings(user="1000:1000"),
+    )
+    container = FakeContainer(attrs=_valid_container_attrs(manager, str(workspace)))
+    manager._client = _fake_client(FakeContainers(container))
+
+    assert manager.remove_for_thread("thread-one") is True
+    assert container.removed is True
+    assert not workspace.exists()
+
+
+class PrunableContainer:
+    def __init__(self, container_id: str) -> None:
+        self.id = container_id
+        self.attrs = {}
+        self.removed = False
+
+    def remove(self, *, force: bool) -> None:
+        assert force is True
+        self.removed = True
+
+
+def _pruning_manager(
+    containers: list[PrunableContainer],
+    *,
+    idle_ttl_seconds: int,
+    max_containers: int,
+) -> DockerSandboxManager:
+    collection = SimpleNamespace(list=lambda **kwargs: containers)
+    return DockerSandboxManager(
+        client=SimpleNamespace(containers=collection),
+        settings=DockerSandboxSettings(
+            idle_ttl_seconds=idle_ttl_seconds,
+            max_containers=max_containers,
+            cleanup_interval_seconds=1,
+        ),
+    )
+
+
+def test_prune_removes_idle_container_but_skips_active_operation() -> None:
+    idle = PrunableContainer("idle")
+    active = PrunableContainer("active")
+    manager = _pruning_manager(
+        [idle, active],
+        idle_ttl_seconds=10,
+        max_containers=0,
+    )
+    manager._last_used = {"idle": 80.0, "active": 80.0}
+    manager._operation_started("active")
+
+    removed = manager.prune(now=100.0)
+
+    assert removed == ["idle"]
+    assert idle.removed is True
+    assert active.removed is False
+
+
+def test_prune_enforces_configured_maximum_by_oldest_activity() -> None:
+    oldest = PrunableContainer("oldest")
+    middle = PrunableContainer("middle")
+    newest = PrunableContainer("newest")
+    manager = _pruning_manager(
+        [newest, oldest, middle],
+        idle_ttl_seconds=0,
+        max_containers=2,
+    )
+    manager._last_used = {"oldest": 10.0, "middle": 20.0, "newest": 30.0}
+
+    removed = manager.prune(now=100.0)
+
+    assert removed == ["oldest"]
+    assert oldest.removed is True
+    assert middle.removed is False
+    assert newest.removed is False
+
+
+def test_shutdown_all_removes_running_and_stopped_containers() -> None:
+    first = PrunableContainer("first")
+    second = PrunableContainer("second")
+    manager = _pruning_manager(
+        [first, second],
+        idle_ttl_seconds=0,
+        max_containers=0,
+    )
+
+    assert manager.shutdown_all() == ["first", "second"]
+    assert first.removed is True
+    assert second.removed is True
 
 
 class StoppingContainer:

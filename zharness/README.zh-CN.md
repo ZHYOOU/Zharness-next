@@ -219,6 +219,9 @@ wget 和 C 编译工具链。容器可联网，可在运行时安装依赖，但
 | `sandbox.docker.memory_limit` | `512m` | 容器内存限制 |
 | `sandbox.docker.network_enabled` | `true` | Docker 沙箱网络访问 |
 | `sandbox.docker.user` | 服务进程 UID/GID | 容器运行用户，例如 `1000:1000` |
+| `sandbox.docker.idle_ttl_seconds` | `86400` | 容器空闲回收秒数；`0` 表示禁用 TTL 清理 |
+| `sandbox.docker.max_containers` | `5` | 最多保留的沙箱容器数；`0` 表示禁用数量限制 |
+| `sandbox.docker.cleanup_interval_seconds` | `300` | 后台清理周期（秒） |
 | `home` | `./.zharness` | thread 工作区父目录 |
 | `sandbox.local.root` | 无 | 本地沙箱根目录，所有 thread 共享（不设置则为各 thread 独立的 `<home>/workspaces/<thread_id>`） |
 | `sandbox.local.allow_host_bash` | `false` | 是否允许本地沙箱执行宿主 bash |
@@ -235,12 +238,13 @@ Docker 沙箱文件上传或下载的单文件默认上限为 16 MiB；本地文
 
 - Docker 容器名由 thread ID 的 SHA-256 摘要生成；本地沙箱在内存中按 thread ID 管理。
 - 复用容器前会校验所属 thread、工作区挂载和安全选项。
-- LangGraph thread 删除成功后，自定义 HTTP 中间件会删除对应沙箱：Docker 容器，或
-  各 thread 自己的本地工作区。
-- 服务正常关闭时会停止所有带 `zharness.sandbox=true` 标签的运行中容器，但保留容器，
-  以便服务重启后继续复用；正在运行的本地宿主命令也会被终止。
-- `kill -9` 等强制终止无法执行关闭清理；废弃 thread 可由外部 TTL 任务调用
-  `DockerSandboxManager.remove_for_thread()` 清理。
+- LangGraph thread 删除成功后，自定义 HTTP 中间件会删除对应 Docker 容器及其工作区，
+  或删除对应的托管本地工作区。
+- 后台任务会回收空闲 Docker 容器并执行容器数量上限；正在执行操作的容器不会被回收，
+  工作区会保留，以便 thread 后续操作重新创建容器。
+- 服务正常关闭时会删除全部 Docker 沙箱容器；正在运行的本地宿主命令也会被终止。
+  除非对应 thread 已删除，否则 thread 工作区会继续保留。
+- `kill -9` 等强制终止无法执行关闭清理；服务下次启动时会先立即清理一次，再进入定期循环。
 
 ## 测试
 

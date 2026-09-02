@@ -3,6 +3,7 @@ import logging
 import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Any
 
 from starlette.applications import Starlette
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -16,6 +17,24 @@ from zharness.sandbox.manager import (
 logger = logging.getLogger(__name__)
 
 _THREAD_DELETE_PATH = re.compile(rf"(?:^|/)threads/(?P<thread_id>{THREAD_ID_PATTERN})$")
+
+
+async def _sandbox_cleanup_loop(manager: Any, stop: asyncio.Event) -> None:
+    """Periodically prune idle and over-limit Docker sandboxes. / 定期清理空闲及超出数量限制的 Docker 沙箱。"""
+
+    interval = manager.settings.cleanup_interval_seconds
+    while not stop.is_set():
+        try:
+            removed = await asyncio.to_thread(manager.prune)
+            if removed:
+                logger.info("Pruned %d sandbox containers", len(removed))
+        except SandboxUnavailableError:
+            logger.exception("Failed to prune sandbox containers")
+
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=interval)
+        except TimeoutError:
+            continue
 
 
 class ThreadSandboxCleanupMiddleware:
@@ -58,16 +77,27 @@ class ThreadSandboxCleanupMiddleware:
 
 @asynccontextmanager
 async def lifespan(_: Starlette) -> AsyncIterator[None]:
-    """Stop sandboxes during graceful shutdown. / 在优雅关闭期间停止全部沙箱。"""
+    """Run periodic sandbox cleanup and remove containers on shutdown. / 运行沙箱定期清理，并在关闭时删除容器。"""
 
+    manager = get_sandbox_manager()
+    cleanup_stop = asyncio.Event()
+    cleanup_task = None
+    if callable(getattr(manager, "prune", None)):
+        cleanup_task = asyncio.create_task(_sandbox_cleanup_loop(manager, cleanup_stop))
     try:
         yield
     finally:
+        cleanup_stop.set()
+        if cleanup_task is not None:
+            await cleanup_task
         try:
-            stopped = await asyncio.to_thread(get_sandbox_manager().stop_all)
-            logger.info("Stopped %d sandbox containers during shutdown", len(stopped))
+            removed = await asyncio.to_thread(manager.shutdown_all)
+            logger.info(
+                "Removed or stopped %d sandbox instances during shutdown",
+                len(removed),
+            )
         except SandboxUnavailableError:
-            logger.exception("Failed to stop sandbox containers during shutdown")
+            logger.exception("Failed to shut down sandbox instances")
 
 
 app = Starlette(lifespan=lifespan)

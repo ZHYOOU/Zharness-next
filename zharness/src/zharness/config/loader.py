@@ -28,7 +28,10 @@ from zharness.config.settings import (
     DEFAULT_POSTGRES_PASSWORD,
     DEFAULT_POSTGRES_PORT,
     DEFAULT_POSTGRES_USER,
+    DEFAULT_SANDBOX_CLEANUP_INTERVAL_SECONDS,
+    DEFAULT_SANDBOX_IDLE_TTL_SECONDS,
     DEFAULT_SANDBOX_IMAGE,
+    DEFAULT_SANDBOX_MAX_CONTAINERS,
     DEFAULT_SANDBOX_MEMORY_LIMIT,
     DEFAULT_SANDBOX_NANO_CPUS,
     DEFAULT_SANDBOX_PIDS_LIMIT,
@@ -200,6 +203,21 @@ def load_settings(path: str | Path | None = None) -> Settings:
                     "ZHARNESS_SANDBOX_NETWORK",
                     docker.get("network_enabled"),
                     True,
+                ),
+                idle_ttl_seconds=_pick_int(
+                    "ZHARNESS_SANDBOX_IDLE_TTL_SECONDS",
+                    docker.get("idle_ttl_seconds"),
+                    DEFAULT_SANDBOX_IDLE_TTL_SECONDS,
+                ),
+                max_containers=_pick_int(
+                    "ZHARNESS_SANDBOX_MAX_CONTAINERS",
+                    docker.get("max_containers"),
+                    DEFAULT_SANDBOX_MAX_CONTAINERS,
+                ),
+                cleanup_interval_seconds=_pick_int(
+                    "ZHARNESS_SANDBOX_CLEANUP_INTERVAL_SECONDS",
+                    docker.get("cleanup_interval_seconds"),
+                    DEFAULT_SANDBOX_CLEANUP_INTERVAL_SECONDS,
                 ),
             ),
             local=LocalSandboxSettings(

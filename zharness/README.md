@@ -244,6 +244,9 @@ Sandbox configuration keys:
 | `sandbox.docker.memory_limit` | `512m` | Container memory limit |
 | `sandbox.docker.network_enabled` | `true` | Docker sandbox network access |
 | `sandbox.docker.user` | Server process UID/GID | Container user, for example `1000:1000` |
+| `sandbox.docker.idle_ttl_seconds` | `86400` | Remove containers idle for this many seconds; `0` disables TTL cleanup |
+| `sandbox.docker.max_containers` | `5` | Maximum retained sandbox containers; `0` disables the count limit |
+| `sandbox.docker.cleanup_interval_seconds` | `300` | Background cleanup interval in seconds |
 | `home` | `./.zharness` | Parent directory for thread workspaces |
 | `sandbox.local.root` | None | Local sandbox root shared by every thread (otherwise each thread gets `<home>/workspaces/<thread_id>`) |
 | `sandbox.local.allow_host_bash` | `false` | Enable host bash execution in the local sandbox |
@@ -265,13 +268,15 @@ containers.
 - Before reuse, a container's thread label, workspace mount, and security
   options are validated.
 - After a LangGraph thread is successfully deleted, the custom HTTP middleware
-  removes its sandbox: the Docker container, or the per-thread local workspace.
-- During graceful shutdown, the server stops all running Docker containers
-  labeled `zharness.sandbox=true` but retains them for reuse after a restart;
-  running local host commands are terminated as well.
-- Forced termination such as `kill -9` cannot run shutdown cleanup. An external
-  TTL job can remove abandoned containers with
-  `DockerSandboxManager.remove_for_thread()`.
+  removes its Docker container and workspace, or its managed local workspace.
+- A background task removes idle Docker containers and enforces the configured
+  container limit. Active operations are never pruned, and workspaces remain
+  available so a later thread operation can recreate its container.
+- During graceful shutdown, the server removes all Docker sandbox containers;
+  running local host commands are terminated as well. Thread workspaces remain
+  available unless the corresponding thread was deleted.
+- Forced termination such as `kill -9` cannot run shutdown cleanup. The next
+  server startup performs an immediate cleanup pass before the periodic loop.
 
 ## Testing
 

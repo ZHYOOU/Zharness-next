@@ -5,6 +5,8 @@ from __future__ import annotations
 import io
 import shlex
 import tarfile
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import PurePosixPath
 from typing import Any, Final
 
@@ -57,6 +59,8 @@ class DockerSandbox(BaseSandbox):
         workdir: str = "/workspace",
         max_output_bytes: int = DEFAULT_MAX_OUTPUT_BYTES,
         max_transfer_bytes: int = DEFAULT_MAX_TRANSFER_BYTES,
+        on_operation_start: Callable[[], None] | None = None,
+        on_operation_end: Callable[[], None] | None = None,
     ) -> None:
         if max_output_bytes < 1 or max_transfer_bytes < 1:
             raise ValueError("sandbox byte limits must be positive")
@@ -65,6 +69,20 @@ class DockerSandbox(BaseSandbox):
         self.max_output_bytes = max_output_bytes
         self.max_transfer_bytes = max_transfer_bytes
         self._ownership: tuple[int, int] | None = None
+        self._on_operation_start = on_operation_start
+        self._on_operation_end = on_operation_end
+
+    @contextmanager
+    def _operation(self) -> Iterator[None]:
+        """Mark a container operation active so lifecycle cleanup cannot remove it. / 将容器操作标记为活跃，避免生命周期清理将其删除。"""
+
+        if self._on_operation_start is not None:
+            self._on_operation_start()
+        try:
+            yield
+        finally:
+            if self._on_operation_end is not None:
+                self._on_operation_end()
 
     @property
     def id(self) -> str:
@@ -77,6 +95,17 @@ class DockerSandbox(BaseSandbox):
         timeout: int | None = None,
     ) -> ExecuteResponse:
         """Execute a shell command, bounding its runtime and retained output. / 执行 shell 命令，并限制其运行时长与保留的输出。"""
+
+        with self._operation():
+            return self._execute(command, timeout=timeout)
+
+    def _execute(
+        self,
+        command: str,
+        *,
+        timeout: int | None = None,
+    ) -> ExecuteResponse:
+        """Execute without adding another lifecycle activity scope. / 执行命令，但不额外增加生命周期活跃作用域。"""
 
         if not isinstance(command, str) or not command:
             return ExecuteResponse(
@@ -130,6 +159,12 @@ class DockerSandbox(BaseSandbox):
             return ExecuteResponse(output=f"Docker execution failed: {exc}")
 
     def upload_files(self, files: list[tuple[str, bytes]]) -> list[FileUploadResponse]:
+        with self._operation():
+            return self._upload_files(files)
+
+    def _upload_files(self, files: list[tuple[str, bytes]]) -> list[FileUploadResponse]:
+        """Upload files within an existing lifecycle activity scope. / 在已有生命周期活跃作用域内上传文件。"""
+
         responses: list[FileUploadResponse] = []
         for path, content in files:
             try:
@@ -213,6 +248,12 @@ class DockerSandbox(BaseSandbox):
         return self._ownership
 
     def download_files(self, paths: list[str]) -> list[FileDownloadResponse]:
+        with self._operation():
+            return self._download_files(paths)
+
+    def _download_files(self, paths: list[str]) -> list[FileDownloadResponse]:
+        """Download files within an existing lifecycle activity scope. / 在已有生命周期活跃作用域内下载文件。"""
+
         responses: list[FileDownloadResponse] = []
         for path in paths:
             try:

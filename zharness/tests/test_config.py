@@ -23,6 +23,9 @@ _ZHARNESS_ENV_VARS = (
     "ZHARNESS_SANDBOX_PIDS_LIMIT",
     "ZHARNESS_SANDBOX_USER",
     "ZHARNESS_SANDBOX_NETWORK",
+    "ZHARNESS_SANDBOX_IDLE_TTL_SECONDS",
+    "ZHARNESS_SANDBOX_MAX_CONTAINERS",
+    "ZHARNESS_SANDBOX_CLEANUP_INTERVAL_SECONDS",
     "ZHARNESS_LOCAL_ROOT",
     "ZHARNESS_ALLOW_HOST_BASH",
     "ZHARNESS_POSTGRES_MANAGED",
@@ -66,6 +69,9 @@ def test_defaults_without_config_file(tmp_path: Path) -> None:
     assert settings.sandbox.docker.pids_limit == 128
     assert settings.sandbox.docker.user is None
     assert settings.sandbox.docker.network_enabled is True
+    assert settings.sandbox.docker.idle_ttl_seconds == 86_400
+    assert settings.sandbox.docker.max_containers == 5
+    assert settings.sandbox.docker.cleanup_interval_seconds == 300
     assert settings.sandbox.local.root is None
     assert settings.sandbox.local.allow_host_bash is False
     assert settings.postgres.managed is True
@@ -93,6 +99,10 @@ server:
 home: /srv/zharness
 sandbox:
   provider: local
+  docker:
+    idle_ttl_seconds: 7200
+    max_containers: 12
+    cleanup_interval_seconds: 60
   local:
     root: /tmp/project
     allow_host_bash: true
@@ -116,6 +126,9 @@ langsmith:
     assert settings.server.port == 9090
     assert settings.home == "/srv/zharness"
     assert settings.sandbox.provider == "local"
+    assert settings.sandbox.docker.idle_ttl_seconds == 7200
+    assert settings.sandbox.docker.max_containers == 12
+    assert settings.sandbox.docker.cleanup_interval_seconds == 60
     assert settings.sandbox.local.root == "/tmp/project"
     assert settings.sandbox.local.allow_host_bash is True
     assert settings.postgres.managed is False
@@ -146,6 +159,7 @@ sandbox:
     monkeypatch.setenv("ZHARNESS_SERVER_PORT", "8080")
     monkeypatch.setenv("ZHARNESS_SANDBOX_USER", "2000:2000")
     monkeypatch.setenv("ZHARNESS_SANDBOX_NETWORK", "false")
+    monkeypatch.setenv("ZHARNESS_SANDBOX_MAX_CONTAINERS", "7")
 
     settings = load_settings(path)
 
@@ -154,6 +168,7 @@ sandbox:
     assert settings.server.port == 8080
     assert settings.sandbox.docker.user == "2000:2000"
     assert settings.sandbox.docker.network_enabled is False
+    assert settings.sandbox.docker.max_containers == 7
 
 
 def test_boolean_environment_parsing(monkeypatch, tmp_path: Path) -> None:
@@ -178,11 +193,15 @@ def test_integer_environment_parsing(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("ZHARNESS_POSTGRES_PORT", "55432")
     monkeypatch.setenv("ZHARNESS_SANDBOX_NANO_CPUS", "2000000000")
     monkeypatch.setenv("ZHARNESS_SANDBOX_PIDS_LIMIT", "64")
+    monkeypatch.setenv("ZHARNESS_SANDBOX_IDLE_TTL_SECONDS", "1800")
+    monkeypatch.setenv("ZHARNESS_SANDBOX_CLEANUP_INTERVAL_SECONDS", "30")
 
     settings = load_settings(path)
     assert settings.postgres.port == 55432
     assert settings.sandbox.docker.nano_cpus == 2_000_000_000
     assert settings.sandbox.docker.pids_limit == 64
+    assert settings.sandbox.docker.idle_ttl_seconds == 1800
+    assert settings.sandbox.docker.cleanup_interval_seconds == 30
 
 
 def test_resolve_config_path_prefers_environment(monkeypatch, tmp_path: Path) -> None:

@@ -63,6 +63,17 @@ sandbox:
     # / 通过宿主网桥访问网络；false 表示禁用。
     # Override with ZHARNESS_SANDBOX_NETWORK. / 通过 ZHARNESS_SANDBOX_NETWORK 覆盖。
     network_enabled: true
+    # Remove containers idle for this many seconds; 0 disables TTL cleanup.
+    # / 删除空闲达到该秒数的容器；0 表示禁用 TTL 清理。
+    # Override with ZHARNESS_SANDBOX_IDLE_TTL_SECONDS. / 通过 ZHARNESS_SANDBOX_IDLE_TTL_SECONDS 覆盖。
+    idle_ttl_seconds: 86400
+    # Maximum retained sandbox containers; 0 disables the count limit.
+    # / 最多保留的沙箱容器数；0 表示禁用数量限制。
+    # Override with ZHARNESS_SANDBOX_MAX_CONTAINERS. / 通过 ZHARNESS_SANDBOX_MAX_CONTAINERS 覆盖。
+    max_containers: 5
+    # Background cleanup cadence in seconds. / 后台清理周期（秒）。
+    # Override with ZHARNESS_SANDBOX_CLEANUP_INTERVAL_SECONDS. / 通过 ZHARNESS_SANDBOX_CLEANUP_INTERVAL_SECONDS 覆盖。
+    cleanup_interval_seconds: 300
   local:
     # Shared host directory used by every thread; null gives each thread its
     # own managed workspace under the home directory.

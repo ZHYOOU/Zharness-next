@@ -901,3 +901,8 @@ class LocalSandboxManager:
         with self._lock:
             sandboxes = tuple(self._sandboxes.values())
         return [sandbox.id for sandbox in sandboxes if sandbox.stop_processes()]
+
+    def shutdown_all(self) -> list[str]:
+        """Stop all local sandbox commands during server shutdown. / 服务关闭时停止所有本地沙箱命令。"""
+
+        return self.stop_all()

@@ -24,6 +24,9 @@ DEFAULT_SANDBOX_IMAGE = "zharness-sandbox:latest"
 DEFAULT_SANDBOX_MEMORY_LIMIT = "512m"
 DEFAULT_SANDBOX_NANO_CPUS = 1_000_000_000
 DEFAULT_SANDBOX_PIDS_LIMIT = 128
+DEFAULT_SANDBOX_IDLE_TTL_SECONDS = 24 * 60 * 60
+DEFAULT_SANDBOX_MAX_CONTAINERS = 5
+DEFAULT_SANDBOX_CLEANUP_INTERVAL_SECONDS = 5 * 60
 
 DEFAULT_POSTGRES_MANAGED = True
 DEFAULT_POSTGRES_USER = "zharness"
@@ -61,6 +64,9 @@ class DockerSandboxSettings:
     user: str | None = None
     skills_root: str | None = None
     network_enabled: bool = True
+    idle_ttl_seconds: int = DEFAULT_SANDBOX_IDLE_TTL_SECONDS
+    max_containers: int = DEFAULT_SANDBOX_MAX_CONTAINERS
+    cleanup_interval_seconds: int = DEFAULT_SANDBOX_CLEANUP_INTERVAL_SECONDS
 
     @classmethod
     def from_env(cls) -> DockerSandboxSettings:
@@ -75,6 +81,9 @@ class DockerSandboxSettings:
             pids_limit=cfg.pids_limit,
             user=cfg.user,
             network_enabled=cfg.network_enabled,
+            idle_ttl_seconds=cfg.idle_ttl_seconds,
+            max_containers=cfg.max_containers,
+            cleanup_interval_seconds=cfg.cleanup_interval_seconds,
             skills_root=_resolved_skills_root(),
         )
 

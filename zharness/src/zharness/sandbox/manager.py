@@ -6,7 +6,10 @@ import hashlib
 import json
 import logging
 import os
+import shutil
 import threading
+import time
+from datetime import datetime
 from typing import Any, Final
 
 from docker.errors import APIError, DockerException, NotFound
@@ -45,7 +48,15 @@ class DockerSandboxManager:
     ) -> None:
         self._client = client
         self.settings = settings or DockerSandboxSettings.from_env()
+        if self.settings.idle_ttl_seconds < 0:
+            raise ValueError("sandbox idle TTL must be non-negative")
+        if self.settings.max_containers < 0:
+            raise ValueError("sandbox maximum container count must be non-negative")
+        if self.settings.cleanup_interval_seconds < 1:
+            raise ValueError("sandbox cleanup interval must be positive")
         self._lock = threading.Lock()
+        self._last_used: dict[str, float] = {}
+        self._active_operations: dict[str, int] = {}
 
     @property
     def client(self) -> Any:
@@ -66,6 +77,7 @@ class DockerSandboxManager:
     def for_thread(self, thread_id: str) -> DockerSandbox:
         workspace = ensure_thread_workspace(thread_id)
         name = self.container_name(thread_id)
+        created = False
         try:
             image_id = str(self.client.images.get(self.settings.image).id)
         except DockerException as exc:
@@ -95,6 +107,7 @@ class DockerSandboxManager:
                         image_id=image_id,
                         policy=policy,
                     )
+                    created = True
                 except DockerException as exc:
                     raise SandboxUnavailableError(
                         f"Could not create Docker sandbox: {exc}"
@@ -117,7 +130,43 @@ class DockerSandboxManager:
                 raise SandboxUnavailableError(
                     f"Could not prepare Docker sandbox: {exc}"
                 ) from exc
-        return DockerSandbox(container)
+            container_id = str(container.id)
+            self._last_used[container_id] = time.time()
+        if created and self.settings.max_containers > 0:
+            self._operation_started(container_id)
+            try:
+                self.prune()
+            except SandboxUnavailableError:
+                logger.exception(
+                    "Failed to enforce sandbox container limit after creation"
+                )
+            finally:
+                self._operation_finished(container_id)
+        return DockerSandbox(
+            container,
+            on_operation_start=lambda: self._operation_started(container_id),
+            on_operation_end=lambda: self._operation_finished(container_id),
+        )
+
+    def _operation_started(self, container_id: str) -> None:
+        """Protect a container while one of its sandbox operations is running. / 在沙箱操作运行期间保护对应容器。"""
+
+        with self._lock:
+            self._active_operations[container_id] = (
+                self._active_operations.get(container_id, 0) + 1
+            )
+            self._last_used[container_id] = time.time()
+
+    def _operation_finished(self, container_id: str) -> None:
+        """Release an operation lease and record the latest activity time. / 释放操作租约并记录最新活跃时间。"""
+
+        with self._lock:
+            remaining = self._active_operations.get(container_id, 0) - 1
+            if remaining > 0:
+                self._active_operations[container_id] = remaining
+            else:
+                self._active_operations.pop(container_id, None)
+            self._last_used[container_id] = time.time()
 
     def _effective_user(self) -> str | None:
         """Resolve the configured container identity. / 解析配置的容器身份。"""
@@ -203,27 +252,155 @@ class DockerSandboxManager:
             return container
 
     def remove_for_thread(self, thread_id: str) -> bool:
-        """Force-remove this thread's container, returning whether one existed. / 强制移除该线程的容器，并返回容器是否存在。"""
+        """Remove a thread's container and workspace, returning whether either existed. / 删除线程的容器和工作区，并返回其中是否有资源存在。"""
 
-        workspace = str(thread_workspace_path(thread_id))
+        workspace = thread_workspace_path(thread_id)
         name = self.container_name(thread_id)
         with self._lock:
+            removed = False
             try:
                 container = self.client.containers.get(name)
             except NotFound:
-                return False
+                container = None
             except DockerException as exc:
                 raise SandboxUnavailableError(
                     f"Could not inspect Docker sandbox: {exc}"
                 ) from exc
-            self._validate_ownership(container, thread_id, workspace)
+            if container is not None:
+                self._validate_ownership(container, thread_id, str(workspace))
+                try:
+                    container.remove(force=True)
+                except DockerException as exc:
+                    raise SandboxUnavailableError(
+                        f"Could not remove Docker sandbox: {exc}"
+                    ) from exc
+                container_id = str(container.id)
+                self._last_used.pop(container_id, None)
+                self._active_operations.pop(container_id, None)
+                removed = True
+
+            if workspace.exists():
+                try:
+                    shutil.rmtree(workspace)
+                except OSError as exc:
+                    raise SandboxUnavailableError(
+                        f"Could not remove sandbox workspace: {exc}"
+                    ) from exc
+                removed = True
+            return removed
+
+    @staticmethod
+    def _container_created_at(container: Any, *, fallback: float) -> float:
+        """Return a container creation timestamp for restart-safe cleanup ordering. / 返回容器创建时间戳，用于重启后仍可安全排序清理。"""
+
+        value = container.attrs.get("Created")
+        if not isinstance(value, str):
+            return fallback
+        try:
+            return datetime.fromisoformat(value).timestamp()
+        except ValueError:
+            return fallback
+
+    def prune(self, *, now: float | None = None) -> list[str]:
+        """Remove idle or over-limit containers while preserving their workspaces. / 删除空闲或超出数量限制的容器，同时保留其工作区。"""
+
+        current_time = time.time() if now is None else now
+        with self._lock:
             try:
-                container.remove(force=True)
+                containers = self.client.containers.list(
+                    all=True,
+                    filters={"label": f"{SANDBOX_LABEL}=true"},
+                )
             except DockerException as exc:
                 raise SandboxUnavailableError(
-                    f"Could not remove Docker sandbox: {exc}"
+                    f"Could not list Docker sandboxes: {exc}"
                 ) from exc
-            return True
+
+            records: list[tuple[float, str, Any]] = []
+            for container in containers:
+                container_id = str(container.id)
+                last_used = self._last_used.get(container_id)
+                if last_used is None:
+                    last_used = self._container_created_at(
+                        container,
+                        fallback=current_time,
+                    )
+                records.append((last_used, container_id, container))
+
+            remove_ids: set[str] = set()
+            if self.settings.idle_ttl_seconds > 0:
+                remove_ids.update(
+                    container_id
+                    for last_used, container_id, _container in records
+                    if self._active_operations.get(container_id, 0) == 0
+                    and current_time - last_used >= self.settings.idle_ttl_seconds
+                )
+
+            retained = [record for record in records if record[1] not in remove_ids]
+            if (
+                self.settings.max_containers > 0
+                and len(retained) > self.settings.max_containers
+            ):
+                excess = len(retained) - self.settings.max_containers
+                removable = sorted(
+                    (
+                        record
+                        for record in retained
+                        if self._active_operations.get(record[1], 0) == 0
+                    ),
+                    key=lambda record: (record[0], record[1]),
+                )
+                remove_ids.update(record[1] for record in removable[:excess])
+
+            removed: list[str] = []
+            for _last_used, container_id, container in records:
+                if container_id not in remove_ids:
+                    continue
+                try:
+                    container.remove(force=True)
+                    removed.append(container_id)
+                except NotFound:
+                    continue
+                except DockerException:
+                    logger.exception(
+                        "Failed to prune sandbox container %s",
+                        container_id,
+                    )
+                finally:
+                    self._last_used.pop(container_id, None)
+                    self._active_operations.pop(container_id, None)
+            return removed
+
+    def shutdown_all(self) -> list[str]:
+        """Force-remove every ZHarness container while preserving workspaces. / 强制删除所有 ZHarness 容器，同时保留工作区。"""
+
+        with self._lock:
+            try:
+                containers = self.client.containers.list(
+                    all=True,
+                    filters={"label": f"{SANDBOX_LABEL}=true"},
+                )
+            except DockerException as exc:
+                raise SandboxUnavailableError(
+                    f"Could not list Docker sandboxes: {exc}"
+                ) from exc
+
+            removed: list[str] = []
+            for container in containers:
+                container_id = str(container.id)
+                try:
+                    container.remove(force=True)
+                    removed.append(container_id)
+                except NotFound:
+                    continue
+                except DockerException:
+                    logger.exception(
+                        "Failed to remove sandbox container %s during shutdown",
+                        container_id,
+                    )
+            self._last_used.clear()
+            self._active_operations.clear()
+            return removed
 
     def stop_all(self, *, timeout: int = 10) -> list[str]:
         """Stop every running ZHarness sandbox without deleting it. / 停止所有正在运行的 ZHarness 沙箱，但不删除它们。"""

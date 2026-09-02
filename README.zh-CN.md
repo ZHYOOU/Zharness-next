@@ -25,7 +25,8 @@ ZHarness Next 是一个面向 AI 编程场景的 Agent 运行底座。它基于 
 - 基于 PostgreSQL 的检查点持久化，包含幂等的建表初始化，本地开发使用托管的
   Compose 服务。
 - 使用 Todo 中间件规划多步骤任务，并在上下文过长时自动生成摘要。
-- 删除线程时清理对应容器，服务正常关闭时停止仍在运行的沙箱。
+- 支持按空闲时间和数量上限自动回收 Docker 沙箱，删除 thread 时完整清理资源，
+  服务正常关闭时删除全部沙箱容器。
 
 ## 项目结构
 
@@ -60,8 +61,8 @@ ZHarness Next 是一个面向 AI 编程场景的 Agent 运行底座。它基于 
    挂载到容器内的 `/workspace`。
 5. 本地提供商直接操作配置的 `sandbox.local.root`（已配置时，所有 thread 共享），
    否则操作各 thread 自己的工作区。
-6. 同一 thread 后续复用同一沙箱；删除 thread 时删除其 Docker 容器或自动管理的
-   本地工作区（共享的本地根目录不会被删除）。
+6. 同一 thread 后续复用同一沙箱；删除 thread 时删除其 Docker 容器和工作区，
+   或删除自动管理的本地工作区（共享的本地根目录不会被删除）。
 
 Agent 工具中的 `/` 是当前 thread 的虚拟工作区根目录，并非宿主机根目录。在 Docker
 提供商下它映射到 `/workspace`，在本地提供商下映射到配置的宿主目录。已安装的技能以
@@ -180,6 +181,9 @@ model:
 | `sandbox.docker.pids_limit` | `128` | 每容器进程数上限 |
 | `sandbox.docker.user` | 服务进程 UID/GID | 容器运行用户，例如 `1000:1000` |
 | `sandbox.docker.network_enabled` | `true` | Docker 沙箱网络访问 |
+| `sandbox.docker.idle_ttl_seconds` | `86400` | 容器空闲回收秒数；`0` 表示禁用 TTL 清理 |
+| `sandbox.docker.max_containers` | `5` | 最多保留的沙箱容器数；`0` 表示禁用数量限制 |
+| `sandbox.docker.cleanup_interval_seconds` | `300` | 后台沙箱清理周期（秒） |
 | `sandbox.local.root` | 各 thread 自己的工作区 | 本地提供商下所有 thread 共享的宿主目录 |
 | `sandbox.local.allow_host_bash` | `false` | 允许本地提供商执行宿主 Shell 命令 |
 | `skills.path` | `<home>/skills`，然后仓库 `skills/` | 覆盖存放 `SKILL.md` 技能包的目录 |

@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -15,7 +16,7 @@ class FakeManager:
         self.removed.append(thread_id)
         return True
 
-    def stop_all(self) -> list[str]:
+    def shutdown_all(self) -> list[str]:
         return ["container-one", "container-two"]
 
 
@@ -134,13 +135,13 @@ async def test_cleanup_path_error_does_not_break_delete_response(monkeypatch) ->
 
 
 @pytest.mark.asyncio
-async def test_lifespan_stops_all_sandboxes(monkeypatch) -> None:
+async def test_lifespan_shuts_down_all_sandboxes(monkeypatch) -> None:
     manager = FakeManager()
     calls: list[str] = []
     monkeypatch.setattr(http_module, "get_sandbox_manager", lambda: manager)
 
     async def run_immediately(function, *args):
-        calls.append("stop")
+        calls.append("shutdown")
         return function(*args)
 
     monkeypatch.setattr(http_module.asyncio, "to_thread", run_immediately)
@@ -148,4 +149,29 @@ async def test_lifespan_stops_all_sandboxes(monkeypatch) -> None:
     async with lifespan(http_module.app):
         assert calls == []
 
-    assert calls == ["stop"]
+    assert calls == ["shutdown"]
+
+
+@pytest.mark.asyncio
+async def test_lifespan_runs_immediate_background_cleanup(monkeypatch) -> None:
+    class PruningManager(FakeManager):
+        settings = SimpleNamespace(cleanup_interval_seconds=3600)
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.pruned = asyncio.Event()
+
+        def prune(self) -> list[str]:
+            self.pruned.set()
+            return ["idle-container"]
+
+    manager = PruningManager()
+    monkeypatch.setattr(http_module, "get_sandbox_manager", lambda: manager)
+
+    async def run_immediately(function, *args):
+        return function(*args)
+
+    monkeypatch.setattr(http_module.asyncio, "to_thread", run_immediately)
+
+    async with lifespan(http_module.app):
+        await asyncio.wait_for(manager.pruned.wait(), timeout=1)

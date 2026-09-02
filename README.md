@@ -34,8 +34,8 @@ future gateway layer.
   managed Compose service for local development.
 - Todo-based planning for multi-step tasks and automatic summarization of long
   conversations.
-- Sandbox cleanup when a thread is deleted, and graceful command shutdown when
-  the server stops.
+- Configurable idle/count-based Docker sandbox cleanup, full thread resource
+  cleanup on deletion, and container removal during graceful shutdown.
 
 ## Repository Layout
 
@@ -73,8 +73,8 @@ directory.
    when set, or on the thread workspace otherwise. A configured local root is
    shared by all threads.
 6. Later operations reuse the same thread sandbox. Deleting a thread removes
-   its Docker container or its automatically managed local workspace; a shared
-   local root is never deleted.
+   its Docker container and workspace, or its automatically managed local
+   workspace; a shared local root is never deleted.
 
 The `/` path exposed to agent tools is the current thread's virtual workspace
 root, not the operating-system root. In the Docker provider it maps to
@@ -209,6 +209,9 @@ Optional settings in `zharness/config.yaml`:
 | `sandbox.docker.pids_limit` | `128` | Process limit per container |
 | `sandbox.docker.user` | Server process UID/GID | Container user, for example `1000:1000` |
 | `sandbox.docker.network_enabled` | `true` | Docker sandbox network access |
+| `sandbox.docker.idle_ttl_seconds` | `86400` | Remove containers idle for this many seconds; `0` disables TTL cleanup |
+| `sandbox.docker.max_containers` | `5` | Maximum retained sandbox containers; `0` disables the count limit |
+| `sandbox.docker.cleanup_interval_seconds` | `300` | Background sandbox cleanup interval |
 | `sandbox.local.root` | Per-thread workspace | Host directory used by every thread with the local provider |
 | `sandbox.local.allow_host_bash` | `false` | Allow the local provider to execute host shell commands |
 | `skills.path` | `<home>/skills`, then the repo `skills/` | Override the directory that contains installed `SKILL.md` packages |
