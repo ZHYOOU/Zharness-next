@@ -35,6 +35,7 @@ def test_create_lead_agent(tmp_path, monkeypatch) -> None:
         "glob_files",
         "grep_files",
         "execute_command",
+        "task",
     }
 
 

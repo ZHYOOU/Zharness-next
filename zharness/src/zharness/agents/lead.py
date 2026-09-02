@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 from langchain.agents import create_agent
 from langchain.agents.middleware import (
     HumanInTheLoopMiddleware,
@@ -10,6 +12,11 @@ from langchain.agents.middleware import (
 from langchain_core.language_models import BaseChatModel
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
+from zharness.middleware import (
+    GENERAL_PURPOSE_SUBAGENT,
+    SubAgentMiddleware,
+    SubAgentSpec,
+)
 from zharness.skills import (
     LocalSkillStorage,
     build_describe_skill_tool,
@@ -29,6 +36,8 @@ from zharness.tools.workspace import (
 APPROVAL_STRATEGY_KEY = "approval_strategy"
 APPROVAL_STRATEGY_ALLOW_ALL = "allow_all"
 APPROVAL_STRATEGY_REQUIRE_APPROVAL = "require_approval"
+
+SUBAGENT_SYSTEM_PROMPT = """Use subagents when a task is self-contained and delegation provides a clear benefit, such as parallel exploration or context isolation. Continue directly for small or tightly coupled work. Give each subagent a complete task description and verify its report before using it."""
 
 
 def _requires_execute_approval(request: ToolCallRequest) -> bool:
@@ -133,7 +142,12 @@ def create_lead_agent(
     model: BaseChatModel,
     *,
     checkpointer: BaseCheckpointSaver | None = None,
+    subagents: Sequence[SubAgentSpec] | None = None,
 ):
+    """Create the lead agent with default or caller-provided subagents.
+
+    使用默认或调用方提供的子智能体创建主智能体。
+    """
     tools = [
         list_workspace,
         read_file,
@@ -157,17 +171,44 @@ def create_lead_agent(
         )
         system_prompt = f"{system_prompt}\n\n{skill_section}"
 
-    return create_agent(
-        name="lead_agent",
-        model=model,
-        tools=tools,
-        middleware=[
-            TodoListMiddleware(),
-            SummarizationMiddleware(
-                model=model,
-                trigger=("tokens", 4000),
-                keep=("messages", 8),
-            ),
+    configured_subagents: Sequence[SubAgentSpec]
+    if subagents is None:
+        configured_subagents = [
+            {
+                **GENERAL_PURPOSE_SUBAGENT,
+                "model": model,
+                "tools": tools,
+            }
+        ]
+    else:
+        configured_subagents = [
+            spec
+            if "runnable" in spec
+            else {
+                **spec,
+                "model": spec.get("model", model),
+                "tools": spec.get("tools", tools),
+            }
+            for spec in subagents
+        ]
+
+    middleware = [
+        TodoListMiddleware(),
+        SummarizationMiddleware(
+            model=model,
+            trigger=("tokens", 4000),
+            keep=("messages", 8),
+        ),
+    ]
+    if configured_subagents:
+        middleware.append(
+            SubAgentMiddleware(
+                subagents=configured_subagents,
+                system_prompt=SUBAGENT_SYSTEM_PROMPT,
+            )
+        )
+    middleware.extend(
+        [
             HumanInTheLoopMiddleware(
                 interrupt_on={
                     "execute_command": {
@@ -187,7 +228,14 @@ def create_lead_agent(
                 max_delay=2.0,
                 jitter=False,
             ),
-        ],
+        ]
+    )
+
+    return create_agent(
+        name="lead_agent",
+        model=model,
+        tools=tools,
+        middleware=middleware,
         system_prompt=system_prompt,
         checkpointer=checkpointer,
     )
