@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 
-DEFAULT_MODEL_NAME = "deepseek-chat"
+DEFAULT_MODEL_NAME = "mimo-v2.5"
 """Default chat model name. / 默认聊天模型名称。"""
 
 DEFAULT_SERVER_HOST = "127.0.0.1"
@@ -43,6 +43,7 @@ class ModelSettings:
     provider: str | None = None
     openai_base_url: str | None = None
     anthropic_base_url: str | None = None
+    mimo_base_url: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

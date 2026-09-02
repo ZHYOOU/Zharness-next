@@ -65,7 +65,8 @@ src/zharness/
 Agent 同时启用了：
 
 - `TodoListMiddleware`：为多步骤任务维护 Todo 状态。
-- `SummarizationMiddleware`：上下文达到 4,000 tokens 时生成摘要，并保留最近 8 条消息。
+- `SummarizationMiddleware`：根据模型上下文参数生成摘要；`mimo-v2.5` 在达到
+  786,432 tokens 时触发，并保留最近 32 条消息。
 - `HumanInTheLoopMiddleware`：为 `execute_command` 提供每次运行可选的
   `allow_all` 和 `require_approval` 策略，默认为 `allow_all`。
 - `ToolErrorMiddleware`：将工具失败格式化为可供模型修复并重试的信息。
@@ -100,24 +101,24 @@ config = {"configurable": {"approval_strategy": "require_approval"}}
 
 `server/graph.py` 从 `config.yaml` 的 `model.name`（或 `ZHARNESS_MODEL`）读取模型名称。
 模型工厂（`zharness.models.factory`）根据 `model.provider`（或 `ZHARNESS_MODEL_PROVIDER`）
-选择的提供商创建聊天模型——`deepseek`、`openai` 或 `anthropic`——temperature 为 `0`，
-请求超时为 60 秒，最多重试 3 次。未设置提供商时按模型名推断：`claude*` 使用 Anthropic，
-`deepseek*` 使用 DeepSeek，其余使用 OpenAI。API Key 分别从 `DEEPSEEK_API_KEY`、
-`OPENAI_API_KEY` 和 `ANTHROPIC_API_KEY` 读取。`model.openai_base_url`（或
-`ZHARNESS_OPENAI_BASE_URL`）可覆盖 OpenAI 兼容服务（Ollama、vLLM 等）的端点，
-`model.anthropic_base_url` 可覆盖 Anthropic 端点。
+选择的提供商创建聊天模型——`mimo`、`deepseek`、`openai` 或 `anthropic`——temperature
+为 `0`，请求超时为 60 秒，最多重试 3 次。未设置提供商时按模型名推断：`mimo*` 使用
+MiMo，`claude*` 使用 Anthropic，`deepseek*` 使用 DeepSeek，其余使用 OpenAI。API Key
+分别从 `MIMO_API_KEY`、`DEEPSEEK_API_KEY`、`OPENAI_API_KEY` 和
+`ANTHROPIC_API_KEY` 读取。MiMo 使用 OpenAI 兼容端点，可通过 `model.mimo_base_url`
+或 `ZHARNESS_MIMO_BASE_URL` 覆盖。
 
 最低配置如下：
 
 ```yaml
 # zharness/config.yaml
 model:
-  name: deepseek-chat
+  name: mimo-v2.5
 ```
 
 ```dotenv
 # zharness/.env（仅密钥）
-DEEPSEEK_API_KEY=your-api-key
+MIMO_API_KEY=your-api-key
 ```
 
 其他提供商示例：

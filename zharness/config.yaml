@@ -14,11 +14,11 @@
 # Chat model. / 聊天模型。
 # Override with ZHARNESS_MODEL. / 通过 ZHARNESS_MODEL 覆盖。
 model:
-  name: deepseek-chat
-  # Model provider: deepseek | openai | anthropic. Inferred from the model
-  # name when null (claude → anthropic, deepseek → deepseek, else openai).
-  # / 模型提供商：deepseek | openai | anthropic。为 null 时根据模型名推断
-  # （claude → anthropic，deepseek → deepseek，其余为 openai）。
+  name: mimo-v2.5
+  # Model provider: mimo | deepseek | openai | anthropic. Inferred from the model
+  # name when null (mimo → mimo, claude → anthropic, deepseek → deepseek, else openai).
+  # / 模型提供商：mimo | deepseek | openai | anthropic。为 null 时根据模型名推断
+  # （mimo → mimo，claude → anthropic，deepseek → deepseek，其余为 openai）。
   # Override with ZHARNESS_MODEL_PROVIDER. / 通过 ZHARNESS_MODEL_PROVIDER 覆盖。
   provider: null
   # Base URL for OpenAI-compatible endpoints, e.g. Ollama or vLLM.
@@ -28,6 +28,10 @@ model:
   # Base URL override for the Anthropic provider. / Anthropic 提供商的基础 URL 覆盖。
   # Override with ZHARNESS_ANTHROPIC_BASE_URL. / 通过 ZHARNESS_ANTHROPIC_BASE_URL 覆盖。
   anthropic_base_url: null
+  # Base URL override for the MiMo OpenAI-compatible endpoint.
+  # / MiMo OpenAI 兼容端点的基础 URL 覆盖。
+  # Override with ZHARNESS_MIMO_BASE_URL. / 通过 ZHARNESS_MIMO_BASE_URL 覆盖。
+  mimo_base_url: https://api.xiaomimimo.com/v1
 
 # LangGraph server bind address. / LangGraph 服务绑定地址。
 # Override with ZHARNESS_SERVER_HOST and ZHARNESS_SERVER_PORT.

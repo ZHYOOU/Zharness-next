@@ -66,8 +66,9 @@ src/zharness/
 The agent also enables:
 
 - `TodoListMiddleware` for tracking multi-step tasks.
-- `SummarizationMiddleware`, which summarizes the context at 4,000 tokens while
-  retaining the eight most recent messages.
+- `SummarizationMiddleware`, which uses model-specific context parameters. For
+  `mimo-v2.5`, it summarizes at 786,432 tokens and retains the 32 most recent
+  messages.
 - `HumanInTheLoopMiddleware`, which supports per-run `allow_all` and
   `require_approval` strategies for `execute_command`; `allow_all` is the
   default.
@@ -110,26 +111,26 @@ surface.
 `server/graph.py` reads the model name from `model.name` in `config.yaml` (or
 `ZHARNESS_MODEL`). The model factory (`zharness.models.factory`) creates a chat
 model for the provider selected by `model.provider` (or
-`ZHARNESS_MODEL_PROVIDER`) — `deepseek`, `openai`, or `anthropic` — with a
+`ZHARNESS_MODEL_PROVIDER`) — `mimo`, `deepseek`, `openai`, or `anthropic` — with a
 temperature of `0`, a 60-second request timeout, and up to three retries. When
-the provider is unset it is inferred from the model name: `claude*` uses
-Anthropic, `deepseek*` uses DeepSeek, and anything else uses OpenAI. API keys
-are read from `DEEPSEEK_API_KEY`, `OPENAI_API_KEY`, and `ANTHROPIC_API_KEY`
-respectively. `model.openai_base_url` (or `ZHARNESS_OPENAI_BASE_URL`) overrides
-the endpoint for OpenAI-compatible services (Ollama, vLLM, etc.), and
-`model.anthropic_base_url` overrides the Anthropic endpoint.
+the provider is unset it is inferred from the model name: `mimo*` uses MiMo,
+`claude*` uses Anthropic, `deepseek*` uses DeepSeek, and anything else uses
+OpenAI. API keys are read from `MIMO_API_KEY`, `DEEPSEEK_API_KEY`,
+`OPENAI_API_KEY`, and `ANTHROPIC_API_KEY` respectively. MiMo uses its
+OpenAI-compatible endpoint, configurable through `model.mimo_base_url` or
+`ZHARNESS_MIMO_BASE_URL`.
 
 Minimum configuration:
 
 ```yaml
 # zharness/config.yaml
 model:
-  name: deepseek-chat
+  name: mimo-v2.5
 ```
 
 ```dotenv
 # zharness/.env (secrets only)
-DEEPSEEK_API_KEY=your-api-key
+MIMO_API_KEY=your-api-key
 ```
 
 Examples for other providers:

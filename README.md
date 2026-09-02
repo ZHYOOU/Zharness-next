@@ -14,7 +14,7 @@ future gateway layer.
 ## Features
 
 - A Lead Agent built with LangGraph and LangChain.
-- Reasoning and tool calling through DeepSeek, OpenAI, or Anthropic chat models.
+- Reasoning and tool calling through MiMo, DeepSeek, OpenAI, or Anthropic chat models.
 - Thread-scoped workspaces with a shared virtual path model across sandbox
   providers.
 - Tools for directory listing, file reading and writing, exact edits, deletion,
@@ -100,7 +100,7 @@ host bash gives the agent the permissions of the ZHarness server process.
 - Python 3.13 or later
 - [uv](https://docs.astral.sh/uv/)
 - Docker Engine when using the default Docker sandbox
-- An API key for your chosen model provider (DeepSeek, OpenAI, or Anthropic)
+- An API key for your chosen model provider (MiMo, DeepSeek, OpenAI, or Anthropic)
 
 Rootless Docker is recommended in production and shared environments. The
 server process needs access to Docker Engine, but the Docker socket must not be
@@ -133,12 +133,12 @@ at least the following:
 ```yaml
 # zharness/config.yaml
 model:
-  name: deepseek-chat
+  name: mimo-v2.5
 ```
 
 ```dotenv
 # zharness/.env (secrets only; never commit)
-DEEPSEEK_API_KEY=your-api-key
+MIMO_API_KEY=your-api-key
 LANGGRAPH_STRICT_MSGPACK=true
 ```
 
@@ -179,9 +179,9 @@ database; delete threads through the API or apply a separate database retention
 policy.
 
 The provider is selected by `model.provider` (or `ZHARNESS_MODEL_PROVIDER`) and
-inferred from the model name when null: names starting with `claude` use
-Anthropic, names starting with `deepseek` use DeepSeek, and everything else
-uses OpenAI. For example:
+inferred from the model name when null: names starting with `mimo` use MiMo,
+names starting with `claude` use Anthropic, names starting with `deepseek` use
+DeepSeek, and everything else uses OpenAI. For example:
 
 ```yaml
 # zharness/config.yaml
@@ -195,10 +195,11 @@ Optional settings in `zharness/config.yaml`:
 
 | Key | Default | Purpose |
 | --- | --- | --- |
-| `model.name` | `deepseek-chat` | Chat model name |
-| `model.provider` | Inferred from model name | Model provider: `deepseek`, `openai`, or `anthropic` |
+| `model.name` | `mimo-v2.5` | Chat model name |
+| `model.provider` | Inferred from model name | Model provider: `mimo`, `deepseek`, `openai`, or `anthropic` |
 | `model.openai_base_url` | None | Base URL for OpenAI-compatible endpoints (Ollama, vLLM, etc.) |
 | `model.anthropic_base_url` | None | Base URL override for the Anthropic provider |
+| `model.mimo_base_url` | `https://api.xiaomimimo.com/v1` | Base URL override for the MiMo provider |
 | `server.host` | `127.0.0.1` | Server bind host |
 | `server.port` | `2024` | Server bind port |
 | `home` | `<cwd>/.zharness` | Server-owned data directory |
@@ -311,7 +312,7 @@ ZHARNESS_RUN_DOCKER_TESTS=1 uv run pytest zharness/tests/test_docker_integration
 
 ## Current Limitations
 
-- The model factory supports DeepSeek, OpenAI (including OpenAI-compatible
+- The model factory supports MiMo, DeepSeek, OpenAI (including OpenAI-compatible
   endpoints), and Anthropic providers, selected with `model.provider` in
   `zharness/config.yaml` (or `ZHARNESS_MODEL_PROVIDER`).
 - `execute_command` defaults to unattended execution. Clients can set

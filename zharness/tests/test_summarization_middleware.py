@@ -6,6 +6,16 @@ from langchain_core.language_models.fake_chat_models import (
 )
 from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 from langgraph.runtime import Runtime
+from zharness.agents.lead import get_summarization_parameters
+
+
+def test_mimo_v2_5_uses_large_context_summarization_parameters() -> None:
+    assert get_summarization_parameters("mimo-v2.5") == (786_432, 32)
+    assert get_summarization_parameters("MIMO-V2.5-PRO") == (786_432, 32)
+
+
+def test_other_models_keep_conservative_summarization_parameters() -> None:
+    assert get_summarization_parameters("deepseek-chat") == (4_000, 8)
 
 
 def test_short_conversation_is_not_summarized() -> None:

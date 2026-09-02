@@ -13,6 +13,7 @@ _ZHARNESS_ENV_VARS = (
     "ZHARNESS_MODEL_PROVIDER",
     "ZHARNESS_OPENAI_BASE_URL",
     "ZHARNESS_ANTHROPIC_BASE_URL",
+    "ZHARNESS_MIMO_BASE_URL",
     "ZHARNESS_SERVER_HOST",
     "ZHARNESS_SERVER_PORT",
     "ZHARNESS_HOME",
@@ -56,9 +57,10 @@ def _write_config(tmp_path: Path, content: str) -> Path:
 def test_defaults_without_config_file(tmp_path: Path) -> None:
     settings = load_settings(tmp_path / "missing.yaml")
 
-    assert settings.model.name == "deepseek-chat"
+    assert settings.model.name == "mimo-v2.5"
     assert settings.model.provider is None
     assert settings.model.openai_base_url is None
+    assert settings.model.mimo_base_url is None
     assert settings.server.host == "127.0.0.1"
     assert settings.server.port == 2024
     assert settings.home is None
@@ -93,6 +95,7 @@ model:
   name: gpt-5
   provider: openai
   openai_base_url: https://ollama.example/v1
+  mimo_base_url: https://mimo.example/v1
 server:
   host: 0.0.0.0
   port: 9090
@@ -122,6 +125,7 @@ langsmith:
     assert settings.model.name == "gpt-5"
     assert settings.model.provider == "openai"
     assert settings.model.openai_base_url == "https://ollama.example/v1"
+    assert settings.model.mimo_base_url == "https://mimo.example/v1"
     assert settings.server.host == "0.0.0.0"
     assert settings.server.port == 9090
     assert settings.home == "/srv/zharness"

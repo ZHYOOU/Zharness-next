@@ -163,6 +163,11 @@ def load_settings(path: str | Path | None = None) -> Settings:
                 model.get("anthropic_base_url"),
                 None,
             ),
+            mimo_base_url=_pick(
+                "ZHARNESS_MIMO_BASE_URL",
+                model.get("mimo_base_url"),
+                None,
+            ),
         ),
         server=ServerSettings(
             host=_pick("ZHARNESS_SERVER_HOST", server.get("host"), DEFAULT_SERVER_HOST),

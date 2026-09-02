@@ -37,6 +37,15 @@ APPROVAL_STRATEGY_KEY = "approval_strategy"
 APPROVAL_STRATEGY_ALLOW_ALL = "allow_all"
 APPROVAL_STRATEGY_REQUIRE_APPROVAL = "require_approval"
 
+DEFAULT_SUMMARIZATION_TRIGGER_TOKENS = 4_000
+DEFAULT_SUMMARIZATION_KEEP_MESSAGES = 8
+MIMO_V2_5_CONTEXT_TOKENS = 1_048_576
+MIMO_V2_5_MAX_OUTPUT_TOKENS = 131_072
+MIMO_V2_5_SUMMARIZATION_TRIGGER_TOKENS = (
+    MIMO_V2_5_CONTEXT_TOKENS - 2 * MIMO_V2_5_MAX_OUTPUT_TOKENS
+)
+MIMO_V2_5_SUMMARIZATION_KEEP_MESSAGES = 32
+
 SUBAGENT_SYSTEM_PROMPT = """Use subagents when a task is self-contained and delegation provides a clear benefit, such as parallel exploration or context isolation. Continue directly for small or tightly coupled work. Give each subagent a complete task description and verify its report before using it."""
 
 
@@ -55,6 +64,19 @@ def _format_tool_error(exc: Exception, request) -> str | None:
     return (
         f"`{request.tool_call['name']}` failed with {type(exc).__name__}: {exc}. "
         "Fix the input and retry, or explain the limitation to the user."
+    )
+
+
+def get_summarization_parameters(model_name: str) -> tuple[int, int]:
+    """Return the token trigger and retained-message count for a model. / 返回模型对应的 token 触发阈值和保留消息数。"""
+    if model_name.strip().lower().startswith("mimo-v2.5"):
+        return (
+            MIMO_V2_5_SUMMARIZATION_TRIGGER_TOKENS,
+            MIMO_V2_5_SUMMARIZATION_KEEP_MESSAGES,
+        )
+    return (
+        DEFAULT_SUMMARIZATION_TRIGGER_TOKENS,
+        DEFAULT_SUMMARIZATION_KEEP_MESSAGES,
     )
 
 
@@ -143,6 +165,7 @@ def create_lead_agent(
     *,
     checkpointer: BaseCheckpointSaver | None = None,
     subagents: Sequence[SubAgentSpec] | None = None,
+    model_name: str | None = None,
 ):
     """Create the lead agent with default or caller-provided subagents.
 
@@ -192,12 +215,21 @@ def create_lead_agent(
             for spec in subagents
         ]
 
+    effective_model_name = model_name
+    if effective_model_name is None:
+        effective_model_name = str(
+            getattr(model, "model_name", None) or getattr(model, "model", "")
+        )
+    summarization_trigger, summarization_keep = get_summarization_parameters(
+        effective_model_name
+    )
+
     middleware = [
         TodoListMiddleware(),
         SummarizationMiddleware(
             model=model,
-            trigger=("tokens", 4000),
-            keep=("messages", 8),
+            trigger=("tokens", summarization_trigger),
+            keep=("messages", summarization_keep),
         ),
     ]
     if configured_subagents:

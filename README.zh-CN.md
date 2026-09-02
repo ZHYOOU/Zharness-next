@@ -12,7 +12,7 @@ ZHarness Next 是一个面向 AI 编程场景的 Agent 运行底座。它基于 
 ## 核心能力
 
 - 基于 LangGraph 和 LangChain 构建 Lead Agent。
-- 通过 DeepSeek、OpenAI 或 Anthropic Chat Model 进行推理和工具调用。
+- 通过 MiMo、DeepSeek、OpenAI 或 Anthropic Chat Model 进行推理和工具调用。
 - 按 LangGraph `thread_id` 隔离工作区与执行容器。
 - 提供目录浏览、文件读写、精确编辑、删除、Glob 和文本搜索工具。
 - 可插拔的沙箱提供商：默认使用加固的 Docker 容器，也可通过
@@ -86,7 +86,7 @@ ZHarness 服务进程的宿主权限。
 - Python 3.13 或更高版本
 - [uv](https://docs.astral.sh/uv/)
 - Docker Engine（使用默认 Docker 沙箱时需要）
-- 所选模型提供商（DeepSeek、OpenAI 或 Anthropic）对应的 API Key
+- 所选模型提供商（MiMo、DeepSeek、OpenAI 或 Anthropic）对应的 API Key
 
 生产或共享环境建议使用 rootless Docker。服务进程需要访问 Docker Engine，但不要
 把 Docker socket 挂载进 Agent 沙箱。
@@ -114,12 +114,12 @@ docker build -f docker/sandbox.Dockerfile -t zharness-sandbox:latest .
 ```yaml
 # zharness/config.yaml
 model:
-  name: deepseek-chat
+  name: mimo-v2.5
 ```
 
 ```dotenv
 # zharness/.env（仅密钥；切勿提交）
-DEEPSEEK_API_KEY=your-api-key
+MIMO_API_KEY=your-api-key
 LANGGRAPH_STRICT_MSGPACK=true
 ```
 
@@ -152,8 +152,8 @@ API 删除 thread 时，其检查点也会一并删除。`make clean` 不会删�
 中的数据；需要通过 API 删除 thread，或为数据库单独配置数据保留策略。
 
 提供商由 `model.provider`（或 `ZHARNESS_MODEL_PROVIDER`）选择，为 null 时根据模型名
-推断：以 `claude` 开头的模型使用 Anthropic，以 `deepseek` 开头的模型使用 DeepSeek，
-其余默认使用 OpenAI。例如：
+推断：以 `mimo` 开头的模型使用 MiMo，以 `claude` 开头的模型使用 Anthropic，
+以 `deepseek` 开头的模型使用 DeepSeek，其余默认使用 OpenAI。例如：
 
 ```yaml
 # zharness/config.yaml
@@ -167,10 +167,11 @@ model:
 
 | 键 | 默认值 | 用途 |
 | --- | --- | --- |
-| `model.name` | `deepseek-chat` | 聊天模型名称 |
-| `model.provider` | 根据模型名推断 | 模型提供商：`deepseek`、`openai` 或 `anthropic` |
+| `model.name` | `mimo-v2.5` | 聊天模型名称 |
+| `model.provider` | 根据模型名推断 | 模型提供商：`mimo`、`deepseek`、`openai` 或 `anthropic` |
 | `model.openai_base_url` | 无 | OpenAI 兼容端点的基础地址（Ollama、vLLM 等） |
 | `model.anthropic_base_url` | 无 | Anthropic 提供商的基础地址覆盖 |
+| `model.mimo_base_url` | `https://api.xiaomimimo.com/v1` | MiMo 提供商的基础地址覆盖 |
 | `server.host` | `127.0.0.1` | 服务绑定地址 |
 | `server.port` | `2024` | 服务绑定端口 |
 | `home` | `<cwd>/.zharness` | 服务器拥有的数据目录 |
@@ -274,7 +275,7 @@ ZHARNESS_RUN_DOCKER_TESTS=1 uv run pytest zharness/tests/test_docker_integration
 
 ## 当前限制
 
-- 模型工厂支持 DeepSeek、OpenAI（含 OpenAI 兼容端点）和 Anthropic 提供商，
+- 模型工厂支持 MiMo、DeepSeek、OpenAI（含 OpenAI 兼容端点）和 Anthropic 提供商，
   通过 `zharness/config.yaml` 中的 `model.provider`（或 `ZHARNESS_MODEL_PROVIDER`）选择。
 - `execute_command` 默认无人值守执行；客户端可将
   `configurable.approval_strategy` 设为 `require_approval`，要求本次运行在命令执行前
