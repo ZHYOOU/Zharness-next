@@ -2,6 +2,8 @@
 
 from zharness.middleware.dynamic_date import DynamicDateMiddleware
 from zharness.middleware.subagents import (
+    DEFAULT_MAX_CONCURRENT_SUBAGENTS,
+    DEFAULT_SUBAGENT_TIMEOUT_SECONDS,
     GENERAL_PURPOSE_SUBAGENT,
     CompiledSubAgent,
     SubAgent,
@@ -12,6 +14,8 @@ from zharness.middleware.subagents import (
 )
 
 __all__ = [
+    "DEFAULT_MAX_CONCURRENT_SUBAGENTS",
+    "DEFAULT_SUBAGENT_TIMEOUT_SECONDS",
     "GENERAL_PURPOSE_SUBAGENT",
     "CompiledSubAgent",
     "DynamicDateMiddleware",
