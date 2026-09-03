@@ -38,6 +38,7 @@ from zharness.config.settings import (
     DEFAULT_SANDBOX_PROVIDER,
     DEFAULT_SERVER_HOST,
     DEFAULT_SERVER_PORT,
+    DEFAULT_TIMEZONE,
     DockerSandboxSettings,
     LangsmithSettings,
     LocalSandboxSettings,
@@ -176,6 +177,7 @@ def load_settings(path: str | Path | None = None) -> Settings:
             ),
         ),
         home=_pick("ZHARNESS_HOME", data.get("home"), None),
+        timezone=_pick("ZHARNESS_TIMEZONE", data.get("timezone"), DEFAULT_TIMEZONE),
         sandbox=SandboxSettings(
             provider=_pick(
                 "ZHARNESS_SANDBOX_PROVIDER",

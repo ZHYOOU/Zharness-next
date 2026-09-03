@@ -106,6 +106,12 @@ default. This keeps temporary overrides (such as `ZHARNESS_HOME`) working as
 environment variables while `config.yaml` remains the primary configuration
 surface.
 
+The lead agent and declarative subagents receive a hidden current-date reminder
+at the beginning of their message history. Set the IANA `timezone` value in
+`config.yaml`, or override it with `ZHARNESS_TIMEZONE`; the default is
+`Asia/Shanghai`. The reminder is reused during the same local day and replaced
+in place after midnight, so stale dates do not accumulate in the conversation.
+
 ## Model Configuration
 
 `server/graph.py` reads the model name from `model.name` in `config.yaml` (or

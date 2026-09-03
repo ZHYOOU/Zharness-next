@@ -3,8 +3,9 @@ from types import SimpleNamespace
 from langchain_core.language_models.fake_chat_models import (
     FakeMessagesListChatModel,
 )
-from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from zharness.agents.lead import SYSTEM_PROMPT, create_lead_agent
+from zharness.middleware.dynamic_date import DYNAMIC_DATE_MARKER
 from zharness.sandbox.protocol import ReadResult
 from zharness.tools import workspace as workspace_module
 
@@ -23,12 +24,13 @@ def test_system_prompt_requires_bounded_network_requests_and_shared_workspace() 
 
 def test_create_lead_agent(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("ZHARNESS_SKILLS_PATH", str(tmp_path / "no-skills"))
-    model = FakeMessagesListChatModel(responses=[AIMessage(content="hello")])
+    model = ToolCallingFakeModel(responses=[AIMessage(content="hello")])
 
     agent = create_lead_agent(model)
 
     assert agent.name == "lead_agent"
     assert agent.context_schema is None
+    assert "DynamicDateMiddleware.before_agent" in agent.nodes
     assert "SummarizationMiddleware.before_model" in agent.nodes
     assert "HumanInTheLoopMiddleware.after_model" in agent.nodes
     assert set(agent.nodes["tools"].bound.tools_by_name) == {
@@ -44,6 +46,24 @@ def test_create_lead_agent(tmp_path, monkeypatch) -> None:
         "web_search",
         "task",
     }
+
+
+def test_lead_agent_persists_hidden_dynamic_date(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("ZHARNESS_SKILLS_PATH", str(tmp_path / "no-skills"))
+    monkeypatch.setenv("ZHARNESS_TIMEZONE", "Asia/Shanghai")
+    model = ToolCallingFakeModel(responses=[AIMessage(content="hello")])
+    agent = create_lead_agent(model)
+
+    result = agent.invoke({"messages": [{"role": "user", "content": "hello"}]})
+
+    reminders = [
+        message
+        for message in result["messages"]
+        if isinstance(message, SystemMessage)
+        and message.additional_kwargs.get(DYNAMIC_DATE_MARKER)
+    ]
+    assert len(reminders) == 1
+    assert reminders[0].additional_kwargs["reminder_timezone"] == "Asia/Shanghai"
 
 
 def test_create_lead_agent_registers_describe_skill_when_skills_exist(

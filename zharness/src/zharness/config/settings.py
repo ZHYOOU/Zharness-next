@@ -18,6 +18,7 @@ DEFAULT_MODEL_NAME = "mimo-v2.5"
 
 DEFAULT_SERVER_HOST = "127.0.0.1"
 DEFAULT_SERVER_PORT = 2024
+DEFAULT_TIMEZONE = "Asia/Shanghai"
 
 DEFAULT_SANDBOX_PROVIDER = "docker"
 DEFAULT_SANDBOX_IMAGE = "zharness-sandbox:latest"
@@ -167,6 +168,7 @@ class Settings:
     model: ModelSettings = field(default_factory=ModelSettings)
     server: ServerSettings = field(default_factory=ServerSettings)
     home: str | None = None
+    timezone: str = DEFAULT_TIMEZONE
     sandbox: SandboxSettings = field(default_factory=SandboxSettings)
     postgres: PostgresSettings = field(default_factory=PostgresSettings)
     skills: SkillsSettings = field(default_factory=SkillsSettings)

@@ -45,6 +45,11 @@ server:
 # Override with ZHARNESS_HOME. / 通过 ZHARNESS_HOME 覆盖。
 home: null
 
+# IANA timezone used for the dynamic current-date context.
+# / 动态当前日期上下文使用的 IANA 时区。
+# Override with ZHARNESS_TIMEZONE. / 通过 ZHARNESS_TIMEZONE 覆盖。
+timezone: Asia/Shanghai
+
 # Sandbox backend. / 沙箱后端。
 # Override with ZHARNESS_SANDBOX_PROVIDER. / 通过 ZHARNESS_SANDBOX_PROVIDER 覆盖。
 sandbox:

@@ -12,8 +12,10 @@ from langchain.agents.middleware import (
 from langchain_core.language_models import BaseChatModel
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
+from zharness.config import get_settings
 from zharness.middleware import (
     GENERAL_PURPOSE_SUBAGENT,
+    DynamicDateMiddleware,
     SubAgentMiddleware,
     SubAgentSpec,
 )
@@ -49,6 +51,22 @@ MIMO_V2_5_SUMMARIZATION_TRIGGER_TOKENS = (
 MIMO_V2_5_SUMMARIZATION_KEEP_MESSAGES = 32
 
 SUBAGENT_SYSTEM_PROMPT = """Use subagents when a task is self-contained and delegation provides a clear benefit, such as parallel exploration or context isolation. Continue directly for small or tightly coupled work. Give each subagent a complete task description and verify its report before using it."""
+
+
+def _with_dynamic_date(
+    spec: SubAgentSpec,
+    timezone: str,
+) -> SubAgentSpec:
+    """Add date context to a declarative subagent if absent.
+
+    当声明式子智能体尚未配置日期上下文时添加该上下文。
+    """
+    if "runnable" in spec:
+        return spec
+    existing = list(spec.get("middleware", []))
+    if not any(isinstance(item, DynamicDateMiddleware) for item in existing):
+        existing.insert(0, DynamicDateMiddleware(timezone))
+    return {**spec, "middleware": existing}
 
 
 def _requires_execute_approval(request: ToolCallRequest) -> bool:
@@ -211,6 +229,7 @@ def create_lead_agent(
     ]
 
     system_prompt = SYSTEM_PROMPT
+    timezone = get_settings().timezone
 
     storage = LocalSkillStorage()
     skills = storage.load_skills()
@@ -225,21 +244,27 @@ def create_lead_agent(
     configured_subagents: Sequence[SubAgentSpec]
     if subagents is None:
         configured_subagents = [
-            {
-                **GENERAL_PURPOSE_SUBAGENT,
-                "model": model,
-                "tools": tools,
-            }
+            _with_dynamic_date(
+                {
+                    **GENERAL_PURPOSE_SUBAGENT,
+                    "model": model,
+                    "tools": tools,
+                },
+                timezone,
+            )
         ]
     else:
         configured_subagents = [
-            spec
-            if "runnable" in spec
-            else {
-                **spec,
-                "model": spec.get("model", model),
-                "tools": spec.get("tools", tools),
-            }
+            _with_dynamic_date(
+                spec
+                if "runnable" in spec
+                else {
+                    **spec,
+                    "model": spec.get("model", model),
+                    "tools": spec.get("tools", tools),
+                },
+                timezone,
+            )
             for spec in subagents
         ]
 
@@ -253,6 +278,7 @@ def create_lead_agent(
     )
 
     middleware = [
+        DynamicDateMiddleware(timezone),
         TodoListMiddleware(),
         SummarizationMiddleware(
             model=model,
