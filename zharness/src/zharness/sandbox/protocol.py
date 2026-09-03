@@ -1255,6 +1255,7 @@ class SandboxBackendProtocol(BackendProtocol):
         command: str,
         *,
         timeout: int | None = None,
+        cwd: str | None = None,
     ) -> ExecuteResponse:
         """Execute a shell command in the sandbox environment.
 
@@ -1284,6 +1285,10 @@ class SandboxBackendProtocol(BackendProtocol):
                 调用方应提供非负整数值，以便在各后端间获得可移植的行为。对于
                 支持无超时执行的后端，值为 0 可能禁用超时。
 
+            cwd: Canonical sandbox workspace path used as the command working directory.
+
+                用作命令工作目录的标准沙箱工作区路径。
+
         Returns:
             `ExecuteResponse` with combined output, exit code, and truncation flag.
 
@@ -1299,14 +1304,18 @@ class SandboxBackendProtocol(BackendProtocol):
         # implementation, not an asyncio.timeout() contract.
         # ASYNC109 - timeout 是转发给同步实现的一个语义参数，而不是 asyncio.timeout() 契约。
         timeout: int | None = None,
+        cwd: str | None = None,
     ) -> ExecuteResponse:
         """Async version of execute. / execute 的异步版本。"""
         # The middleware layer validates timeout support before calling, so
         # this guard only protects direct callers bypassing the middleware.
         # 中间件层在调用前会验证超时支持，因此该防护只保护绕过中间件的直接调用方。
+        kwargs: dict[str, object] = {}
         if timeout is not None and execute_accepts_timeout(type(self)):
-            return await asyncio.to_thread(self.execute, command, timeout=timeout)
-        return await asyncio.to_thread(self.execute, command)
+            kwargs["timeout"] = timeout
+        if cwd is not None and execute_accepts_cwd(type(self)):
+            kwargs["cwd"] = cwd
+        return await asyncio.to_thread(self.execute, command, **kwargs)
 
 
 @lru_cache(maxsize=256)
@@ -1358,6 +1367,21 @@ def execute_accepts_timeout(cls: type[SandboxBackendProtocol]) -> bool:
         return False
     else:
         return "timeout" in sig.parameters
+
+
+@lru_cache(maxsize=128)
+def execute_accepts_cwd(cls: type[SandboxBackendProtocol]) -> bool:
+    """Check whether a backend class's `execute` accepts a `cwd` kwarg. / 检查后端的 `execute` 是否接受 `cwd` 关键字参数。"""
+    try:
+        sig = inspect.signature(cls.execute)
+    except (ValueError, TypeError):
+        logger.warning(
+            "Could not inspect signature of %s.execute; assuming cwd is not supported.",
+            cls.__qualname__,
+            exc_info=True,
+        )
+        return False
+    return "cwd" in sig.parameters
 
 
 def _supports_delete(backend: BackendProtocol) -> bool:

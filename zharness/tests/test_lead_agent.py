@@ -4,7 +4,7 @@ from langchain_core.language_models.fake_chat_models import (
     FakeMessagesListChatModel,
 )
 from langchain_core.messages import AIMessage, ToolMessage
-from zharness.agents.lead import create_lead_agent
+from zharness.agents.lead import SYSTEM_PROMPT, create_lead_agent
 from zharness.sandbox.protocol import ReadResult
 from zharness.tools import workspace as workspace_module
 
@@ -13,6 +13,12 @@ class ToolCallingFakeModel(FakeMessagesListChatModel):
     def bind_tools(self, tools, *, tool_choice=None, **kwargs):
         _ = tools, tool_choice, kwargs
         return self
+
+
+def test_system_prompt_requires_bounded_network_requests_and_shared_workspace() -> None:
+    assert "urlopen(..., timeout=15)" in SYSTEM_PROMPT
+    assert "curl --max-time 15" in SYSTEM_PROMPT
+    assert "`/workspace` is the stable path" in SYSTEM_PROMPT
 
 
 def test_create_lead_agent(tmp_path, monkeypatch) -> None:
@@ -35,6 +41,7 @@ def test_create_lead_agent(tmp_path, monkeypatch) -> None:
         "glob_files",
         "grep_files",
         "execute_command",
+        "web_search",
         "task",
     }
 
@@ -88,7 +95,7 @@ def test_lead_agent_retries_transient_tool_errors(monkeypatch) -> None:
                 tool_calls=[
                     {
                         "name": "read_file",
-                        "args": {"path": "/notes/result.txt"},
+                        "args": {"path": "/workspace/notes/result.txt"},
                         "id": "call-read",
                         "type": "tool_call",
                     }
@@ -126,7 +133,7 @@ def test_lead_agent_surfaces_persistent_tool_errors(monkeypatch) -> None:
                 tool_calls=[
                     {
                         "name": "read_file",
-                        "args": {"path": "/notes/result.txt"},
+                        "args": {"path": "/workspace/notes/result.txt"},
                         "id": "call-read",
                         "type": "tool_call",
                     }

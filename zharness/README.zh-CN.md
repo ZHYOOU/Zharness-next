@@ -25,7 +25,7 @@ src/zharness/
 │   ├── local.py             # 本地文件系统沙箱实现
 │   ├── manager.py           # thread 与沙箱的生命周期映射
 │   ├── protocol.py          # 执行、上传和下载结果类型
-│   └── workspace.py         # 虚拟 / 到沙箱 /workspace 的适配器
+│   └── workspace.py         # 共享的 /workspace 路径契约与校验
 ├── server/
 │   ├── checkpointer.py      # PostgreSQL 检查点生命周期
 │   ├── graph.py             # LangGraph 图入口
@@ -59,7 +59,7 @@ src/zharness/
 | `delete_path` | 删除文件或目录树 |
 | `glob_files` | 使用 Glob 模式查找路径 |
 | `grep_files` | 在工作区文本文件中搜索字面字符串 |
-| `execute_command` | 在当前 thread 的沙箱中执行 Shell 命令 |
+| `execute_command` | 从虚拟工作区 `cwd` 执行 Shell 命令 |
 | `describe_skill` | 获取已安装技能的元数据（存在技能时才注册） |
 
 Agent 同时启用了：
@@ -146,12 +146,14 @@ model:
 `<home>` 是 `config.yaml` 中的 `home` 键（或 `ZHARNESS_HOME`）；未配置时默认使用当前
 工作目录下的 `.zharness`。thread ID 只允许字母、数字、下划线和连字符，最长 128 个字符。
 
-Agent 看到的路径是以 `/` 开始的虚拟路径。例如 `/src/main.py` 会映射到当前 thread
-Docker 沙箱内的 `/workspace/src/main.py`。文件工具和 `execute_command` 共用同一个
-`BaseSandbox` 后端，因此看到完全相同的文件。适配器会拒绝：
+`/workspace` 是暴露给 Agent、文件工具和命令执行的稳定路径。例如
+`/workspace/src/main.py` 在本地和 Docker 沙箱中指向同一文件，只有宿主机
+存储路径会在内部转换。所有工作区输入必须是 `/workspace` 下的绝对路径，
+工具输出也使用同一标准命名空间。适配器会拒绝：
 
 - `..` 路径穿越和 `~` 展开；
-- 在需要文件路径时操作虚拟根目录；
+- 相对路径，以及 `/workspace` 或 `/mnt/skills` 之外的绝对路径；
+- 在需要文件路径时直接操作 `/workspace`；
 - 通过仅支持 UTF-8 的 Agent 工具读取二进制文件。
 
 文件读写、编辑、删除、Glob 和 Grep 都委托给线程级沙箱后端完成。
@@ -228,7 +230,10 @@ wget 和 C 编译工具链。容器可联网，可在运行时安装依赖，但
 | `sandbox.local.allow_host_bash` | `false` | 是否允许本地沙箱执行宿主 bash |
 | `skills.path` | 解析出的技能根目录 | 覆盖存放 `SKILL.md` 技能包的目录 |
 
-命令长度上限为 128 KiB，超时参数范围为 1 至 300 秒，保留输出默认最多 1 MiB。
+命令长度上限为 128 KiB，超时参数范围为 1 至 300 秒。可选的 `cwd` 使用工作区
+工具路径（默认为 `/workspace`）；工具会在传给当前后端前校验并规范化该路径。
+允许 shell 命令自行切换目录，工具不会重写命令字符串。Agent 创建的每个外部网络
+请求都必须显式设置 15 秒请求超时。保留输出默认最多 1 MiB。
 Docker 沙箱文件上传或下载的单文件默认上限为 16 MiB；本地文件操作默认上限为
 256 KiB。
 

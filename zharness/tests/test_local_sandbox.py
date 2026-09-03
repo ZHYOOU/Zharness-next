@@ -226,6 +226,29 @@ def test_execute_runs_when_enabled(root: Path) -> None:
     assert result.output == "hello from host"
 
 
+def test_execute_uses_sandbox_workdir(root: Path) -> None:
+    nested = root / "reports" / "daily"
+    nested.mkdir(parents=True)
+    sandbox = LocalSandbox(root, allow_host_bash=True)
+
+    result = sandbox.execute("pwd", cwd="/workspace/reports/daily")
+
+    assert result.exit_code == 0
+    assert result.output == f"{nested}\n"
+
+
+def test_execute_rejects_invalid_sandbox_workdir(root: Path) -> None:
+    sandbox = LocalSandbox(root, allow_host_bash=True)
+
+    escaped = sandbox.execute("pwd", cwd="/tmp")
+    missing = sandbox.execute("pwd", cwd="/workspace/missing")
+
+    assert escaped.exit_code == 2
+    assert "escapes the sandbox workspace" in escaped.output
+    assert missing.exit_code == 2
+    assert missing.output == ("Error: command cwd does not exist: /workspace/missing")
+
+
 def test_execute_discards_output_beyond_memory_cap(root: Path) -> None:
     sandbox = LocalSandbox(root, allow_host_bash=True, max_output_bytes=1024)
 
@@ -260,14 +283,20 @@ def test_execute_timeout_kills_background_process_group(root: Path) -> None:
 
 def test_workspace_adapter_roundtrip(root: Path) -> None:
     workspace = SandboxWorkspace(LocalSandbox(root))
-    assert workspace.write("/notes/result.txt", "one\ntwo") == "/notes/result.txt"
-    assert workspace.read("/notes/result.txt", offset=1, limit=1) == "two"
-    assert workspace.glob("*.txt", path="/notes") == ["/notes/result.txt"]
-    assert workspace.grep("one", path="/notes") == [
-        {"path": "/notes/result.txt", "line": 1, "text": "one"}
+    assert workspace.write("/workspace/notes/result.txt", "one\ntwo") == (
+        "/workspace/notes/result.txt"
+    )
+    assert workspace.read("/workspace/notes/result.txt", offset=1, limit=1) == "two"
+    assert workspace.glob("*.txt", path="/workspace/notes") == [
+        "/workspace/notes/result.txt"
     ]
-    assert [entry["path"] for entry in workspace.ls("/notes")] == ["/notes/result.txt"]
-    assert workspace.delete("/notes") == "/notes"
+    assert workspace.grep("one", path="/workspace/notes") == [
+        {"path": "/workspace/notes/result.txt", "line": 1, "text": "one"}
+    ]
+    assert [entry["path"] for entry in workspace.ls("/workspace/notes")] == [
+        "/workspace/notes/result.txt"
+    ]
+    assert workspace.delete("/workspace/notes") == "/workspace/notes"
 
 
 def test_local_manager_per_thread_workspace(tmp_path: Path, monkeypatch) -> None:

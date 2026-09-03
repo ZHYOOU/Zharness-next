@@ -1860,6 +1860,7 @@ class BaseSandbox(SandboxBackendProtocol, ABC):
         command: str,
         *,
         timeout: int | None = None,
+        cwd: str | None = None,
     ) -> ExecuteResponse:
         """Execute a command in the sandbox and return `ExecuteResponse`.
 
@@ -1868,6 +1869,8 @@ class BaseSandbox(SandboxBackendProtocol, ABC):
             timeout: Maximum time in seconds to wait for the command to complete.
 
                 If `None`, uses the backend's default timeout.
+
+            cwd: Canonical sandbox workspace path used as the command working directory.
 
         Returns:
             `ExecuteResponse` with combined output, exit code, and truncation flag.
@@ -1879,6 +1882,8 @@ class BaseSandbox(SandboxBackendProtocol, ABC):
             timeout: 等待命令完成的最大秒数。
 
                 若为 `None`，使用后端的默认超时。
+
+            cwd: 用作命令工作目录的标准沙箱工作区路径。
 
         返回：
             包含合并输出、退出码与截断标志的 `ExecuteResponse`。

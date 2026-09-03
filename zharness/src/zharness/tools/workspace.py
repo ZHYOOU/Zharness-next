@@ -25,7 +25,7 @@ _WORKSPACE_ERRORS = (
 
 @tool
 def list_workspace(
-    path: str = "/",
+    path: str = "/workspace",
     *,
     runtime: ToolRuntime,
 ) -> list[FileInfo] | str:
@@ -81,13 +81,14 @@ def edit_file(
     """Replace exact text in a UTF-8 workspace file. / 替换 UTF-8 工作区文件中的精确文本。"""
 
     try:
-        count = _runtime_workspace(runtime).edit(
+        workspace = _runtime_workspace(runtime)
+        count = workspace.edit(
             path,
             old_string,
             new_string,
             replace_all=replace_all,
         )
-        return f"Replaced {count} occurrence(s) in {path}"
+        return f"Replaced {count} occurrence(s) in {workspace.canonical_path(path)}"
     except _WORKSPACE_ERRORS as exc:
         return f"Error: {exc}"
 
@@ -110,7 +111,7 @@ def delete_path(
 @tool
 def glob_files(
     pattern: str,
-    path: str = "/",
+    path: str = "/workspace",
     *,
     runtime: ToolRuntime,
 ) -> list[str] | str:
@@ -125,7 +126,7 @@ def glob_files(
 @tool
 def grep_files(
     pattern: str,
-    path: str = "/",
+    path: str = "/workspace",
     include: str | None = None,
     *,
     runtime: ToolRuntime,

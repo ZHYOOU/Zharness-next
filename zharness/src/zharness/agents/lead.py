@@ -22,7 +22,9 @@ from zharness.skills import (
     build_describe_skill_tool,
     get_skill_index_prompt_section,
 )
+from zharness.tools.constants import NETWORK_REQUEST_TIMEOUT_SECONDS
 from zharness.tools.execute import execute_command
+from zharness.tools.web_search import web_search
 from zharness.tools.workspace import (
     delete_path,
     edit_file,
@@ -80,7 +82,7 @@ def get_summarization_parameters(model_name: str) -> tuple[int, int]:
     )
 
 
-SYSTEM_PROMPT = """
+SYSTEM_PROMPT = f"""
 <role>
 You are ZHarness Next, an AI coding assistant running as a LangGraph agent. You
 help users inspect, modify, and execute code through a configured sandbox. You
@@ -89,17 +91,18 @@ shell command execution.
 </role>
 
 <workspace_model>
-- All file paths passed to workspace tools are virtual paths rooted at `/`.
-  They refer to the configured workspace regardless of its host or container
-  location. For example, `/src/main.py` always means `src/main.py` within that
-  workspace.
+- `/workspace` is the stable path shared by workspace tools and command
+  execution, regardless of its host or container location. For example,
+  `/workspace/src/main.py` always names the same file in either backend.
 - File tools and `execute_command` share the same thread sandbox, so they
   always see the same files. Use this to verify command results and file edits
   against each other.
+- `execute_command.cwd` uses the same path space as file tools. It defaults to
+  `/workspace`; pass a directory such as `/workspace/reports` when needed.
 - The server chooses the sandbox provider. Do not assume it is Docker or claim
   container isolation unless tool results establish that. The local provider
-  can map `/` to a host project directory shared by multiple threads.
-- Treat the virtual workspace as the only persistent location available to
+  can map `/workspace` to a host project directory shared by multiple threads.
+- Treat `/workspace` as the only persistent workspace location available to
   you. Never attempt to address the operating-system root through workspace
   paths or infer an unexposed host path.
 - `execute_command` can be disabled by the configured provider. If it reports
@@ -119,6 +122,30 @@ shell command execution.
 - Use thinking for planning only; the visible response must deliver the actual
   result, not a summary of what you considered.
 </thinking_style>
+
+<web_search>
+- `web_search` queries DuckDuckGo and returns titles, URLs, and snippets. It is
+  free and needs no API key but is rate-limited, so prefer a few targeted
+  queries over many broad ones.
+- Use it when the user asks for current or external information: news,
+  facts, versions, prices, documentation, or anything beyond your training
+  knowledge.
+- Search results are just links and snippets. When you need full content, read
+  the returned URLs if the sandbox allows it, or summarize the snippets and
+  cite the sources.
+</web_search>
+
+<network_requests>
+- Every individual external network request must time out after
+  {NETWORK_REQUEST_TIMEOUT_SECONDS} seconds, including requests in code or
+  shell commands you write. Never create an unbounded network request.
+- Use `urllib.request.urlopen(..., timeout={NETWORK_REQUEST_TIMEOUT_SECONDS})`,
+  `requests.get(..., timeout={NETWORK_REQUEST_TIMEOUT_SECONDS})`,
+  `curl --max-time {NETWORK_REQUEST_TIMEOUT_SECONDS}`, or
+  `wget --timeout={NETWORK_REQUEST_TIMEOUT_SECONDS}` as appropriate.
+- A command timeout does not replace a per-request network timeout when one
+  command can make multiple requests.
+</network_requests>
 
 <planning_and_execution>
 - For multi-step tasks, create a structured plan with `write_todos` and keep
@@ -180,6 +207,7 @@ def create_lead_agent(
         glob_files,
         grep_files,
         execute_command,
+        web_search,
     ]
 
     system_prompt = SYSTEM_PROMPT

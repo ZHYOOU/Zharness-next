@@ -17,48 +17,68 @@ class SandboxWorkspaceError(ValueError):
 
 
 class SandboxWorkspace:
-    """Expose one sandbox backend through a virtual workspace root.
+    """Expose one sandbox backend through a stable workspace namespace.
 
-    Agent-visible paths are rooted at ``/``. The wrapped sandbox receives only
-    paths beneath ``/workspace``, which is the thread workspace mount managed
-    by :class:`DockerSandboxManager`.
+    ``/workspace`` is the public path contract shared by agents, file tools,
+    and command execution. Workspace inputs must use that absolute namespace;
+    tool output always uses the same canonical paths.
 
-    通过一个虚拟工作区根目录暴露单个沙箱后端。Agent 可见的路径以 ``/`` 为根，
-    被包装的沙箱只接收 ``/workspace`` 之下的路径，该路径即由
-    :class:`DockerSandboxManager` 管理的线程工作区挂载点。
+    ``/workspace`` 是 Agent、文件工具和命令执行共享的公开路径契约。
+    工作区输入必须使用该绝对命名空间，工具输出始终使用同样的标准路径。
     """
 
     def __init__(self, backend: BackendProtocol) -> None:
         self.backend = backend
 
     @staticmethod
-    def _container_path(path: str, *, allow_root: bool = True) -> str:
+    def _container_path(
+        path: str,
+        *,
+        allow_root: bool = True,
+        allow_skills: bool = True,
+    ) -> str:
         if not isinstance(path, str) or "\0" in path:
             raise SandboxWorkspaceError("Invalid workspace path")
         if path.startswith("~"):
             raise SandboxWorkspaceError("Home expansion is not allowed")
 
-        candidate = PurePosixPath(path or "/")
+        candidate = PurePosixPath(path)
         if ".." in candidate.parts:
             raise SandboxWorkspaceError("Path traversal is not allowed")
+        if not candidate.is_absolute():
+            raise SandboxWorkspaceError("Workspace paths must be absolute")
 
         # The read-only skills namespace is passed through as an absolute
         # container path; the backends confine it to the skills mount.
         #
         # 只读技能命名空间以绝对容器路径原样传递；后端会将其限制在技能挂载点内。
-        if (
+        if allow_skills and (
             candidate == _SKILLS_CONTAINER_ROOT
             or _SKILLS_CONTAINER_ROOT in candidate.parents
         ):
             return str(candidate)
 
-        relative_parts = (
-            candidate.parts[1:] if candidate.is_absolute() else candidate.parts
-        )
-        mapped = _CONTAINER_WORKSPACE.joinpath(*relative_parts)
-        if not allow_root and mapped == _CONTAINER_WORKSPACE:
+        if (
+            candidate != _CONTAINER_WORKSPACE
+            and _CONTAINER_WORKSPACE not in candidate.parents
+        ):
+            raise SandboxWorkspaceError("Path must be under /workspace")
+        if not allow_root and candidate == _CONTAINER_WORKSPACE:
             raise SandboxWorkspaceError("Cannot operate on the workspace root")
-        return str(mapped)
+        return str(candidate)
+
+    @classmethod
+    def command_cwd(cls, path: str = "/workspace") -> str:
+        """Map a virtual command cwd into the backend workspace.
+
+        将命令的虚拟 cwd 映射到后端工作区。
+        """
+        return cls._container_path(path, allow_skills=False)
+
+    @classmethod
+    def canonical_path(cls, path: str) -> str:
+        """Return the canonical public path for one workspace input. / 返回工作区输入的标准公开路径。"""
+        return cls._container_path(path)
 
     @staticmethod
     def _virtual_path(path: str, *, is_dir: bool = False) -> str:
@@ -70,14 +90,14 @@ class SandboxWorkspace:
             virtual = candidate.as_posix()
         else:
             try:
-                relative = candidate.relative_to(_CONTAINER_WORKSPACE)
+                candidate.relative_to(_CONTAINER_WORKSPACE)
             except ValueError as exc:
                 raise SandboxWorkspaceError(
                     "Sandbox returned a path outside the workspace"
                 ) from exc
 
-            virtual = "/" if relative == PurePosixPath(".") else f"/{relative}"
-        if is_dir and virtual != "/":
+            virtual = candidate.as_posix()
+        if is_dir and virtual != str(_CONTAINER_WORKSPACE):
             virtual += "/"
         return virtual
 
@@ -88,7 +108,7 @@ class SandboxWorkspace:
         message = error.removeprefix("Error: ")
         raise SandboxWorkspaceError(message)
 
-    def ls(self, path: str = "/") -> list[FileInfo]:
+    def ls(self, path: str = "/workspace") -> list[FileInfo]:
         result = self.backend.ls(self._container_path(path))
         self._raise_for_error(result.error)
         if result.entries is None:
@@ -154,7 +174,7 @@ class SandboxWorkspace:
             raise SandboxWorkspaceError("Sandbox returned no deleted path")
         return self._virtual_path(result.path)
 
-    def glob(self, pattern: str, *, path: str = "/") -> list[str]:
+    def glob(self, pattern: str, *, path: str = "/workspace") -> list[str]:
         result = self.backend.glob(pattern, path=self._container_path(path))
         self._raise_for_error(result.error)
         if result.matches is None:
@@ -165,7 +185,7 @@ class SandboxWorkspace:
         self,
         pattern: str,
         *,
-        path: str = "/",
+        path: str = "/workspace",
         include: str | None = None,
     ) -> list[GrepMatch]:
         result = self.backend.grep(

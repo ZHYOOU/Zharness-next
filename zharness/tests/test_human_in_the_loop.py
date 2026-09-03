@@ -43,7 +43,7 @@ def _model_requesting_execution() -> ToolCallingFakeModel:
 def test_execute_requires_approval_before_sandbox_access(monkeypatch) -> None:
     executions: list[tuple[str, int]] = []
     sandbox = SimpleNamespace(
-        execute=lambda command, timeout: (
+        execute=lambda command, timeout, cwd: (
             executions.append((command, timeout))
             or ExecuteResponse(output="approved", exit_code=0)
         )
@@ -141,7 +141,7 @@ def test_rejected_execute_never_accesses_sandbox(monkeypatch) -> None:
 def test_execute_is_allowed_without_approval_by_default(monkeypatch) -> None:
     executions: list[tuple[str, int]] = []
     sandbox = SimpleNamespace(
-        execute=lambda command, timeout: (
+        execute=lambda command, timeout, cwd: (
             executions.append((command, timeout))
             or ExecuteResponse(output="allowed", exit_code=0)
         )

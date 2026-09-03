@@ -726,6 +726,7 @@ class LocalSandbox(SandboxBackendProtocol):
         command: str,
         *,
         timeout: int | None = None,
+        cwd: str | None = None,
     ) -> ExecuteResponse:
         """Run a shell command on the host when host bash is enabled. / 启用主机 Bash 后在主机上运行 shell 命令。"""
         if not self.allow_host_bash:
@@ -745,6 +746,20 @@ class LocalSandbox(SandboxBackendProtocol):
                 output="Error: timeout must be a non-negative integer", exit_code=2
             )
 
+        try:
+            command_cwd = self.resolve_path(cwd or str(SANDBOX_ROOT))
+            if not command_cwd.exists():
+                return ExecuteResponse(
+                    output=f"Error: command cwd does not exist: {cwd}", exit_code=2
+                )
+            if not command_cwd.is_dir():
+                return ExecuteResponse(
+                    output=f"Error: command cwd is not a directory: {cwd}",
+                    exit_code=2,
+                )
+        except LocalSandboxError as exc:
+            return ExecuteResponse(output=f"Error: {exc}", exit_code=2)
+
         output = bytearray()
         truncated = False
         reader_errors: list[OSError] = []
@@ -757,7 +772,7 @@ class LocalSandbox(SandboxBackendProtocol):
                         "-lc",
                         self._host_command(command, skills_root=skills_snapshot),
                     ],
-                    cwd=self.root,
+                    cwd=command_cwd,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     start_new_session=True,

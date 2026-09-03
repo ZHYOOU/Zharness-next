@@ -85,13 +85,13 @@ def test_execute_uses_timeout_workdir_and_output_cap() -> None:
     api = FakeAPI([b"abc", b"def"], exit_code=7)
     sandbox = DockerSandbox(FakeContainer(api), max_output_bytes=4)
 
-    result = sandbox.execute("echo hello", timeout=12)
+    result = sandbox.execute("echo hello", timeout=12, cwd="/workspace/reports/daily")
 
     assert result.output == "abcd"
     assert result.exit_code == 7
     assert result.truncated is True
     assert api.created is not None
-    assert api.created["workdir"] == "/workspace"
+    assert api.created["workdir"] == "/workspace/reports/daily"
     assert api.created["cmd"] == [
         "timeout",
         "--signal=TERM",
@@ -101,6 +101,17 @@ def test_execute_uses_timeout_workdir_and_output_cap() -> None:
         "-lc",
         "echo hello",
     ]
+
+
+def test_execute_rejects_workdir_outside_workspace() -> None:
+    api = FakeAPI()
+    sandbox = DockerSandbox(FakeContainer(api))
+
+    result = sandbox.execute("pwd", cwd="/tmp")
+
+    assert result.exit_code == 2
+    assert result.output == "Error: command cwd escapes the workspace"
+    assert api.created is None
 
 
 def test_execute_reports_operation_activity() -> None:

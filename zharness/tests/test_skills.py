@@ -452,9 +452,9 @@ def test_workspace_maps_workspace_and_skills_paths_independently(
     sandbox, workspace_root, _ = _local_sandbox_with_skills(tmp_path)
     workspace = SandboxWorkspace(sandbox)
 
-    workspace.write("/notes/a.txt", "hi")
+    workspace.write("/workspace/notes/a.txt", "hi")
     skill = workspace.read(f"/mnt/skills/public/data-analysis/{SKILL_MD_FILE}")
-    user_file = workspace.read("/notes/a.txt")
+    user_file = workspace.read("/workspace/notes/a.txt")
 
     assert workspace_root.is_dir()
     assert skill != user_file

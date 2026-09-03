@@ -26,7 +26,7 @@ src/zharness/
 │   ├── local.py             # Local filesystem sandbox implementation
 │   ├── manager.py           # Thread-to-sandbox lifecycle mapping
 │   ├── protocol.py          # Execution and file-transfer result types
-│   └── workspace.py         # Virtual / to sandbox /workspace adapter
+│   └── workspace.py         # Shared /workspace path contract and validation
 ├── server/
 │   ├── checkpointer.py      # PostgreSQL-backed checkpoint lifecycle
 │   ├── graph.py             # LangGraph graph entry point
@@ -60,7 +60,7 @@ src/zharness/
 | `delete_path` | Delete a file or directory tree |
 | `glob_files` | Find paths with a glob pattern |
 | `grep_files` | Search workspace text files for a literal string |
-| `execute_command` | Run a shell command in the current thread's sandbox |
+| `execute_command` | Run a shell command from a virtual workspace `cwd` |
 | `describe_skill` | Fetch metadata for installed skills (registered when skills exist) |
 
 The agent also enables:
@@ -160,13 +160,15 @@ default is `.zharness` under the current working directory. Thread IDs may
 contain letters, digits, underscores, and hyphens, with a maximum length of 128
 characters.
 
-Paths exposed to the agent are virtual paths beginning at `/`. For example,
-`/src/main.py` maps to `/workspace/src/main.py` inside the current thread's
-Docker sandbox. File tools and `execute_command` therefore share one
-`BaseSandbox` backend and see the same files. The adapter rejects:
+`/workspace` is the stable path exposed to the agent, file tools, and command
+execution. For example, `/workspace/src/main.py` names the same file in local
+and Docker sandboxes; only the host storage path is translated internally.
+All workspace inputs must be absolute paths under `/workspace`, and tool output
+uses the same canonical namespace. The adapter rejects:
 
 - `..` path traversal and `~` expansion;
-- attempts to operate on the virtual root where a file path is required;
+- relative paths and absolute paths outside `/workspace` or `/mnt/skills`;
+- attempts to operate on `/workspace` where a file path is required;
 - binary reads through the UTF-8-only Agent tool contract.
 
 Glob and Grep return at most 100 results by default. Writes use a temporary file
@@ -254,6 +256,11 @@ Sandbox configuration keys:
 | `skills.path` | Resolved skills root | Override the directory that contains installed `SKILL.md` packages |
 
 Commands are limited to 128 KiB of text and a timeout between 1 and 300 seconds.
+The optional `cwd` uses workspace-tool paths (`/workspace` by default); the
+tool validates and canonicalizes it before passing it to the active backend.
+Shell directory changes are allowed and command strings are not rewritten.
+Every external network request created by the agent must set an explicit
+15-second request timeout.
 Retained output is limited to 1 MiB by default. Docker sandbox file uploads and
 downloads have a default per-file limit of 16 MiB; local file operations default
 to a 256 KiB per-file limit.

@@ -38,6 +38,21 @@ def _validated_path(path: str) -> PurePosixPath:
     return parsed
 
 
+def _validated_workdir(path: str, workspace_root: str) -> str:
+    """Validate that a command workdir stays beneath the workspace root. / 校验命令工作目录始终位于工作区根目录之下。"""
+    if not isinstance(path, str) or not path.startswith("/") or "\0" in path:
+        raise ValueError("command cwd must be an absolute sandbox path")
+    parsed = PurePosixPath(path)
+    root = PurePosixPath(workspace_root)
+    if ".." in parsed.parts:
+        raise ValueError("command cwd traversal is not allowed")
+    try:
+        parsed.relative_to(root)
+    except ValueError as exc:
+        raise ValueError("command cwd escapes the workspace") from exc
+    return str(parsed)
+
+
 def _api_error_code(exc: APIError) -> str:
     status_code = getattr(exc, "status_code", None)
     if status_code == 404:
@@ -93,17 +108,19 @@ class DockerSandbox(BaseSandbox):
         command: str,
         *,
         timeout: int | None = None,
+        cwd: str | None = None,
     ) -> ExecuteResponse:
         """Execute a shell command, bounding its runtime and retained output. / 执行 shell 命令，并限制其运行时长与保留的输出。"""
 
         with self._operation():
-            return self._execute(command, timeout=timeout)
+            return self._execute(command, timeout=timeout, cwd=cwd)
 
     def _execute(
         self,
         command: str,
         *,
         timeout: int | None = None,
+        cwd: str | None = None,
     ) -> ExecuteResponse:
         """Execute without adding another lifecycle activity scope. / 执行命令，但不额外增加生命周期活跃作用域。"""
 
@@ -115,6 +132,11 @@ class DockerSandbox(BaseSandbox):
             return ExecuteResponse(
                 output="Error: timeout must be a non-negative integer", exit_code=2
             )
+
+        try:
+            workdir = _validated_workdir(cwd or self.workdir, self.workdir)
+        except ValueError as exc:
+            return ExecuteResponse(output=f"Error: {exc}", exit_code=2)
 
         cmd = ["/bin/sh", "-lc", command]
         if timeout:
@@ -133,7 +155,7 @@ class DockerSandbox(BaseSandbox):
                 cmd,
                 stdout=True,
                 stderr=True,
-                workdir=self.workdir,
+                workdir=workdir,
             )
             exec_id = created["Id"]
             stream = api.exec_start(exec_id, stream=True, demux=False)

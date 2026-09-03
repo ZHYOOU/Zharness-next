@@ -128,30 +128,39 @@ def test_runtime_is_hidden_from_all_model_schemas() -> None:
     assert set(grep_files.args) == {"pattern", "path", "include"}
 
 
-def test_tools_use_one_thread_sandbox_and_map_virtual_paths(monkeypatch) -> None:
+def test_tools_use_one_thread_sandbox_and_canonical_workspace_paths(
+    monkeypatch,
+) -> None:
     sandbox = RecordingSandbox()
     thread_ids = install_manager(monkeypatch, sandbox)
     runtime = runtime_for("thread-one")
 
-    assert write_file.func("/notes/result.txt", "one\ntwo", runtime=runtime) == (
-        "Wrote 7 bytes to /notes/result.txt"
+    assert write_file.func(
+        "/workspace/notes/result.txt", "one\ntwo", runtime=runtime
+    ) == ("Wrote 7 bytes to /workspace/notes/result.txt")
+    assert (
+        read_file.func(
+            "/workspace/notes/result.txt", offset=1, limit=1, runtime=runtime
+        )
+        == "two"
     )
     assert (
-        read_file.func("/notes/result.txt", offset=1, limit=1, runtime=runtime) == "two"
+        edit_file.func("/workspace/notes/result.txt", "two", "needle", runtime=runtime)
+        == "Replaced 1 occurrence(s) in /workspace/notes/result.txt"
     )
-    assert (
-        edit_file.func("/notes/result.txt", "two", "needle", runtime=runtime)
-        == "Replaced 1 occurrence(s) in /notes/result.txt"
-    )
-    assert glob_files.func("*.txt", "/notes", runtime=runtime) == ["/notes/result.txt"]
+    assert glob_files.func("*.txt", "/workspace/notes", runtime=runtime) == [
+        "/workspace/notes/result.txt"
+    ]
     assert grep_files.func("needle", runtime=runtime) == [
-        {"path": "/notes/result.txt", "line": 2, "text": "needle"}
+        {"path": "/workspace/notes/result.txt", "line": 2, "text": "needle"}
     ]
-    assert list_workspace.func("/notes", runtime=runtime) == [
-        {"path": "/notes/result.txt", "is_dir": False, "size": 6},
-        {"path": "/notes/archive/", "is_dir": True},
+    assert list_workspace.func("/workspace/notes", runtime=runtime) == [
+        {"path": "/workspace/notes/result.txt", "is_dir": False, "size": 6},
+        {"path": "/workspace/notes/archive/", "is_dir": True},
     ]
-    assert delete_path.func("/notes", runtime=runtime) == "Deleted /notes"
+    assert delete_path.func("/workspace/notes", runtime=runtime) == (
+        "Deleted /workspace/notes"
+    )
 
     assert thread_ids == ["thread-one"] * 7
     assert sandbox.calls == [
@@ -165,13 +174,40 @@ def test_tools_use_one_thread_sandbox_and_map_virtual_paths(monkeypatch) -> None
     ]
 
 
-@pytest.mark.parametrize("path", ["../secret", "a/../../secret", "~/.ssh", "a\0b"])
+@pytest.mark.parametrize(
+    "path",
+    ["relative.txt", "../secret", "a/../../secret", "/outside", "~/.ssh", "a\0b"],
+)
 def test_adapter_rejects_unsafe_paths_before_backend_access(path: str) -> None:
     sandbox = RecordingSandbox()
     workspace = make_workspace(sandbox)
 
     with pytest.raises(SandboxWorkspaceError):
         workspace.read(path)
+    assert sandbox.calls == []
+
+
+def test_adapter_rejects_legacy_root_relative_path() -> None:
+    sandbox = RecordingSandbox()
+    workspace = make_workspace(sandbox)
+
+    with pytest.raises(SandboxWorkspaceError, match="under /workspace"):
+        workspace.write("/legacy.txt", "data")
+    assert sandbox.calls == []
+
+
+def test_edit_tool_rejects_legacy_path(monkeypatch) -> None:
+    sandbox = RecordingSandbox()
+    install_manager(monkeypatch, sandbox)
+
+    result = edit_file.func(
+        "/legacy.txt",
+        "before",
+        "after",
+        runtime=runtime_for("thread-one"),
+    )
+
+    assert result == "Error: Path must be under /workspace"
     assert sandbox.calls == []
 
 
@@ -183,7 +219,7 @@ def test_tool_errors_are_recoverable_and_root_delete_is_blocked(monkeypatch) -> 
     assert read_file.func("../missing.txt", runtime=runtime) == (
         "Error: Path traversal is not allowed"
     )
-    assert delete_path.func("/", runtime=runtime) == (
+    assert delete_path.func("/workspace", runtime=runtime) == (
         "Error: Cannot delete the workspace root"
     )
     assert sandbox.calls == []
@@ -206,7 +242,7 @@ def test_adapter_rejects_binary_reads() -> None:
     workspace = make_workspace(sandbox)
 
     with pytest.raises(SandboxWorkspaceError, match="not UTF-8"):
-        workspace.read("binary.bin")
+        workspace.read("/workspace/binary.bin")
 
 
 def test_tools_fail_closed_without_server_thread_identity(monkeypatch) -> None:
