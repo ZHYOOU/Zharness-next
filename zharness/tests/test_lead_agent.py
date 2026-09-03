@@ -45,7 +45,24 @@ def test_create_lead_agent(tmp_path, monkeypatch) -> None:
         "execute_command",
         "web_search",
         "task",
+        "memory_search",
+        "memory_add",
+        "memory_update",
+        "memory_delete",
     }
+
+
+def test_create_lead_agent_omits_memory_tools_when_disabled(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("ZHARNESS_SKILLS_PATH", str(tmp_path / "no-skills"))
+    monkeypatch.setenv("ZHARNESS_MEMORY_ENABLED", "false")
+    model = ToolCallingFakeModel(responses=[AIMessage(content="hello")])
+
+    agent = create_lead_agent(model)
+
+    assert "memory_search" not in agent.nodes["tools"].bound.tools_by_name
+    assert "memory_add" not in agent.nodes["tools"].bound.tools_by_name
 
 
 def test_lead_agent_persists_hidden_dynamic_date(tmp_path, monkeypatch) -> None:

@@ -25,6 +25,9 @@ ZHarness Next 是一个面向 AI 编程场景的 Agent 运行底座。它基于 
 - 基于 PostgreSQL 的检查点持久化，包含幂等的建表初始化，本地开发使用托管的
   Compose 服务。
 - 使用 Todo 中间件规划多步骤任务，并在上下文过长时自动生成摘要。
+- 长期记忆存储在 PostgreSQL 中：每轮结束后自动抽取事实，经确定性写入闸门过滤、
+  内容去重、混合驱逐评分限容，并以隐藏上下文与 `memory_search`/`memory_add`/
+  `memory_update`/`memory_delete` 工具的形式呈现给 agent。
 - 支持按空闲时间和数量上限自动回收 Docker 沙箱，删除 thread 时完整清理资源，
   服务正常关闭时删除全部沙箱容器。
 

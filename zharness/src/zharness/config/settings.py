@@ -35,6 +35,18 @@ DEFAULT_POSTGRES_PASSWORD = "change-me"
 DEFAULT_POSTGRES_DB = "zharness"
 DEFAULT_POSTGRES_PORT = 5432
 
+DEFAULT_MEMORY_ENABLED = True
+DEFAULT_MEMORY_USER_ID = "default"
+DEFAULT_MEMORY_MAX_FACTS = 200
+DEFAULT_MEMORY_MIN_CONFIDENCE = 0.7
+DEFAULT_MEMORY_INJECT_TOP_K = 8
+DEFAULT_MEMORY_SEARCH_LIMIT = 10
+DEFAULT_MEMORY_GATE_ENABLED = True
+DEFAULT_MEMORY_EXTRACTION_ENABLED = True
+DEFAULT_MEMORY_EXTRACTION_MODEL = None
+DEFAULT_MEMORY_INJECTION_ENABLED = True
+DEFAULT_MEMORY_INJECTION_MAX_CHARS = 2000
+
 
 @dataclass(frozen=True, slots=True)
 class ModelSettings:
@@ -154,6 +166,30 @@ class SkillsSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class MemorySettings:
+    """Long-term memory settings. / 长期记忆配置。
+
+    Facts are stored in PostgreSQL and surfaced to the agent as hidden context
+    and through the ``memory_*`` tools. See ``zharness/memory`` for details.
+
+    事实存储于 PostgreSQL，并通过隐藏上下文与 ``memory_*`` 工具呈现给 agent。
+    详见 ``zharness/memory``。
+    """
+
+    enabled: bool = DEFAULT_MEMORY_ENABLED
+    user_id: str = DEFAULT_MEMORY_USER_ID
+    max_facts: int = DEFAULT_MEMORY_MAX_FACTS
+    min_confidence: float = DEFAULT_MEMORY_MIN_CONFIDENCE
+    inject_top_k: int = DEFAULT_MEMORY_INJECT_TOP_K
+    search_limit: int = DEFAULT_MEMORY_SEARCH_LIMIT
+    gate_enabled: bool = DEFAULT_MEMORY_GATE_ENABLED
+    extraction_enabled: bool = DEFAULT_MEMORY_EXTRACTION_ENABLED
+    extraction_model: str | None = DEFAULT_MEMORY_EXTRACTION_MODEL
+    injection_enabled: bool = DEFAULT_MEMORY_INJECTION_ENABLED
+    injection_max_chars: int = DEFAULT_MEMORY_INJECTION_MAX_CHARS
+
+
+@dataclass(frozen=True, slots=True)
 class LangsmithSettings:
     """LangSmith observability settings. / LangSmith 可观测性配置。"""
 
@@ -172,4 +208,5 @@ class Settings:
     sandbox: SandboxSettings = field(default_factory=SandboxSettings)
     postgres: PostgresSettings = field(default_factory=PostgresSettings)
     skills: SkillsSettings = field(default_factory=SkillsSettings)
+    memory: MemorySettings = field(default_factory=MemorySettings)
     langsmith: LangsmithSettings = field(default_factory=LangsmithSettings)

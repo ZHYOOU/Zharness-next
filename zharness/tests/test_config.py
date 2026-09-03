@@ -37,6 +37,17 @@ _ZHARNESS_ENV_VARS = (
     "ZHARNESS_POSTGRES_DB",
     "ZHARNESS_POSTGRES_PORT",
     "ZHARNESS_SKILLS_PATH",
+    "ZHARNESS_MEMORY_ENABLED",
+    "ZHARNESS_MEMORY_USER_ID",
+    "ZHARNESS_MEMORY_MAX_FACTS",
+    "ZHARNESS_MEMORY_MIN_CONFIDENCE",
+    "ZHARNESS_MEMORY_INJECT_TOP_K",
+    "ZHARNESS_MEMORY_SEARCH_LIMIT",
+    "ZHARNESS_MEMORY_GATE_ENABLED",
+    "ZHARNESS_MEMORY_EXTRACTION_ENABLED",
+    "ZHARNESS_MEMORY_EXTRACTION_MODEL",
+    "ZHARNESS_MEMORY_INJECTION_ENABLED",
+    "ZHARNESS_MEMORY_INJECTION_MAX_CHARS",
     "LANGSMITH_TRACING",
     "LANGSMITH_PROJECT",
 )
@@ -85,6 +96,17 @@ def test_defaults_without_config_file(tmp_path: Path) -> None:
     assert settings.postgres.database == "zharness"
     assert settings.postgres.port == 5432
     assert settings.skills.path is None
+    assert settings.memory.enabled is True
+    assert settings.memory.user_id == "default"
+    assert settings.memory.max_facts == 200
+    assert settings.memory.min_confidence == 0.7
+    assert settings.memory.inject_top_k == 8
+    assert settings.memory.search_limit == 10
+    assert settings.memory.gate_enabled is True
+    assert settings.memory.extraction_enabled is True
+    assert settings.memory.extraction_model is None
+    assert settings.memory.injection_enabled is True
+    assert settings.memory.injection_max_chars == 2000
     assert settings.langsmith.tracing is False
     assert settings.langsmith.project is None
 
@@ -117,6 +139,18 @@ postgres:
   user: alice
   database: agents
   port: 55432
+memory:
+  enabled: false
+  user_id: alice
+  max_facts: 500
+  min_confidence: 0.8
+  inject_top_k: 12
+  search_limit: 25
+  gate_enabled: false
+  extraction_enabled: false
+  extraction_model: deepseek-chat
+  injection_enabled: false
+  injection_max_chars: 5000
 langsmith:
   tracing: true
   project: my-project
@@ -143,6 +177,17 @@ langsmith:
     assert settings.postgres.user == "alice"
     assert settings.postgres.database == "agents"
     assert settings.postgres.port == 55432
+    assert settings.memory.enabled is False
+    assert settings.memory.user_id == "alice"
+    assert settings.memory.max_facts == 500
+    assert settings.memory.min_confidence == 0.8
+    assert settings.memory.inject_top_k == 12
+    assert settings.memory.search_limit == 25
+    assert settings.memory.gate_enabled is False
+    assert settings.memory.extraction_enabled is False
+    assert settings.memory.extraction_model == "deepseek-chat"
+    assert settings.memory.injection_enabled is False
+    assert settings.memory.injection_max_chars == 5000
     assert settings.langsmith.tracing is True
     assert settings.langsmith.project == "my-project"
 
@@ -195,6 +240,35 @@ def test_boolean_environment_parsing(monkeypatch, tmp_path: Path) -> None:
 
     monkeypatch.setenv("ZHARNESS_ALLOW_HOST_BASH", "yes")
     assert load_settings(path).sandbox.local.allow_host_bash is True
+
+    monkeypatch.setenv("ZHARNESS_MEMORY_ENABLED", "false")
+    monkeypatch.setenv("ZHARNESS_MEMORY_GATE_ENABLED", "no")
+    monkeypatch.setenv("ZHARNESS_MEMORY_INJECTION_ENABLED", "off")
+    settings = load_settings(path)
+    assert settings.memory.enabled is False
+    assert settings.memory.gate_enabled is False
+    assert settings.memory.injection_enabled is False
+
+
+def test_memory_environment_overrides_yaml(monkeypatch, tmp_path: Path) -> None:
+    path = _write_config(tmp_path, "memory:\n  max_facts: 10\n")
+
+    monkeypatch.setenv("ZHARNESS_MEMORY_MAX_FACTS", "42")
+    monkeypatch.setenv("ZHARNESS_MEMORY_MIN_CONFIDENCE", "0.55")
+    monkeypatch.setenv("ZHARNESS_MEMORY_INJECT_TOP_K", "3")
+    monkeypatch.setenv("ZHARNESS_MEMORY_SEARCH_LIMIT", "7")
+    monkeypatch.setenv("ZHARNESS_MEMORY_USER_ID", "alice")
+    monkeypatch.setenv("ZHARNESS_MEMORY_EXTRACTION_MODEL", "deepseek-chat")
+    monkeypatch.setenv("ZHARNESS_MEMORY_INJECTION_MAX_CHARS", "1200")
+
+    settings = load_settings(path)
+    assert settings.memory.max_facts == 42
+    assert settings.memory.min_confidence == 0.55
+    assert settings.memory.inject_top_k == 3
+    assert settings.memory.search_limit == 7
+    assert settings.memory.user_id == "alice"
+    assert settings.memory.extraction_model == "deepseek-chat"
+    assert settings.memory.injection_max_chars == 1200
 
 
 def test_integer_environment_parsing(monkeypatch, tmp_path: Path) -> None:

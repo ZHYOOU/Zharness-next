@@ -117,6 +117,41 @@ postgres:
 skills:
   path: null
 
+# Long-term memory. Facts are stored in PostgreSQL, extracted automatically
+# after each turn, and surfaced as hidden context plus the memory_* tools.
+# / 长期记忆。事实存储于 PostgreSQL，每轮结束后自动抽取，并以隐藏上下文与
+# memory_* 工具的形式呈现给 agent。通过 ZHARNESS_MEMORY_* 覆盖。
+memory:
+  # Master switch; disables extraction, injection, and the memory tools.
+  # / 总开关；禁用抽取、注入与记忆工具。
+  enabled: true
+  # Identity of the single user whose memories are stored and recalled.
+  # / 存储与召回记忆的单用户身份标识。
+  user_id: default
+  # Capacity cap for retained facts; oldest/lowest-scoring facts are evicted.
+  # / 保留事实的容量上限；超出时驱逐最早/评分最低的事实。
+  max_facts: 200
+  # Confidence threshold below which extracted facts are not stored.
+  # / 抽取事实置信度低于该阈值时不入库。
+  min_confidence: 0.7
+  # How many top facts to inject into the model request as hidden context.
+  # / 作为隐藏上下文注入模型请求的顶级事实数量。
+  inject_top_k: 8
+  # Default result limit for memory_search. / memory_search 的默认结果条数。
+  search_limit: 10
+  # Enforce the deterministic write gate (user-scoped, durable, descriptive).
+  # / 强制执行确定性写入闸门（用户作用域、持久、描述性）。
+  gate_enabled: true
+  # Auto-extract memories after each completed turn. / 每轮结束后自动抽取记忆。
+  extraction_enabled: true
+  # Optional dedicated model name for extraction; null reuses the lead model.
+  # / 抽取专用模型名称（可选）；null 时复用主模型。
+  extraction_model: null
+  # Inject memory context into every lead-agent model call. / 每次主模型调用注入记忆上下文。
+  injection_enabled: true
+  # Maximum characters of the injected memory block. / 注入记忆块的最大字符数。
+  injection_max_chars: 2000
+
 # LangSmith observability. / LangSmith 可观测性。
 # Override with LANGSMITH_TRACING and LANGSMITH_PROJECT.
 # / 通过 LANGSMITH_TRACING 和 LANGSMITH_PROJECT 覆盖。

@@ -2,32 +2,13 @@
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from urllib.parse import quote
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
-from zharness.config.loader import get_settings
+from zharness.server.database import postgres_uri as _postgres_uri
 
-_POSTGRES_URI_ENV = "ZHARNESS_POSTGRES_URI"
 _STRICT_SERIALIZER = JsonPlusSerializer(allowed_msgpack_modules=None)
-
-
-def _postgres_uri() -> str:
-    """Resolve an explicit or managed-Compose PostgreSQL URI. / 解析显式或由 Compose 托管的 PostgreSQL URI。"""
-
-    postgres = get_settings().postgres
-    postgres_uri = postgres.uri or ""
-    if postgres_uri:
-        return postgres_uri
-
-    if not postgres.managed:
-        raise RuntimeError(f"{_POSTGRES_URI_ENV} is required")
-
-    user = quote(postgres.user, safe="")
-    password = quote(postgres.password, safe="")
-    database = quote(postgres.database, safe="")
-    return f"postgresql://{user}:{password}@127.0.0.1:{postgres.port}/{database}"
 
 
 @asynccontextmanager

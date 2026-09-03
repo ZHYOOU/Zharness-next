@@ -34,6 +34,10 @@ future gateway layer.
   managed Compose service for local development.
 - Todo-based planning for multi-step tasks and automatic summarization of long
   conversations.
+- Long-term memory stored in PostgreSQL: facts are extracted automatically after
+  each turn, filtered by a deterministic write gate, deduplicated, capacity-capped
+  with a hybrid eviction score, and surfaced as hidden context plus the
+  `memory_search`/`memory_add`/`memory_update`/`memory_delete` tools.
 - Configurable idle/count-based Docker sandbox cleanup, full thread resource
   cleanup on deletion, and container removal during graceful shutdown.
 
@@ -328,6 +332,10 @@ ZHARNESS_RUN_DOCKER_TESTS=1 uv run pytest zharness/tests/test_docker_integration
   `/workspace` or baked into the sandbox image.
 - Skills are mounted read-only at `/mnt/skills`; the agent can read them but
   never writes into that namespace.
+- Long-term memory requires the same PostgreSQL database as checkpointing and is
+  extracted synchronously after each completed turn (before the turn returns),
+  so a dedicated `memory.extraction_model` or disabling extraction keeps token
+  cost predictable.
 - The local sandbox provider is intended for single-user, trusted local
   environments only. Host bash execution is disabled unless
   `sandbox.local.allow_host_bash` is `true`, and enabling it runs commands

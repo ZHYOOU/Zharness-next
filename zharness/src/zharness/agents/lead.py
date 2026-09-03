@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Sequence
 
 from langchain.agents import create_agent
@@ -13,12 +14,14 @@ from langchain_core.language_models import BaseChatModel
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
 from zharness.config import get_settings
+from zharness.memory import MemoryMiddleware
 from zharness.middleware import (
     GENERAL_PURPOSE_SUBAGENT,
     DynamicDateMiddleware,
     SubAgentMiddleware,
     SubAgentSpec,
 )
+from zharness.models.factory import create_chat_model
 from zharness.skills import (
     LocalSkillStorage,
     build_describe_skill_tool,
@@ -84,6 +87,36 @@ def _format_tool_error(exc: Exception, request) -> str | None:
     return (
         f"`{request.tool_call['name']}` failed with {type(exc).__name__}: {exc}. "
         "Fix the input and retry, or explain the limitation to the user."
+    )
+
+
+def _build_memory_middleware(model, memory_settings) -> MemoryMiddleware:
+    """Build the long-term memory middleware from the configured settings.
+
+    根据配置项构建长期记忆中间件。
+    """
+    extraction_model = None
+    if memory_settings.extraction_model:
+        try:
+            extraction_model = create_chat_model(memory_settings.extraction_model)
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "Failed to create extraction model %r; reusing the lead model",
+                memory_settings.extraction_model,
+            )
+    return MemoryMiddleware(
+        model=model,
+        extraction_model=extraction_model,
+        enabled=memory_settings.enabled,
+        extraction_enabled=memory_settings.extraction_enabled,
+        injection_enabled=memory_settings.injection_enabled,
+        user_id=memory_settings.user_id,
+        max_facts=memory_settings.max_facts,
+        min_confidence=memory_settings.min_confidence,
+        inject_top_k=memory_settings.inject_top_k,
+        search_limit=memory_settings.search_limit,
+        gate_enabled=memory_settings.gate_enabled,
+        injection_max_chars=memory_settings.injection_max_chars,
     )
 
 
@@ -286,6 +319,9 @@ def create_lead_agent(
             keep=("messages", summarization_keep),
         ),
     ]
+    memory_settings = get_settings().memory
+    if memory_settings.enabled:
+        middleware.append(_build_memory_middleware(model, memory_settings))
     if configured_subagents:
         middleware.append(
             SubAgentMiddleware(

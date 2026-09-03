@@ -22,6 +22,17 @@ from typing import Any, Final
 import yaml
 
 from zharness.config.settings import (
+    DEFAULT_MEMORY_ENABLED,
+    DEFAULT_MEMORY_EXTRACTION_ENABLED,
+    DEFAULT_MEMORY_EXTRACTION_MODEL,
+    DEFAULT_MEMORY_GATE_ENABLED,
+    DEFAULT_MEMORY_INJECT_TOP_K,
+    DEFAULT_MEMORY_INJECTION_ENABLED,
+    DEFAULT_MEMORY_INJECTION_MAX_CHARS,
+    DEFAULT_MEMORY_MAX_FACTS,
+    DEFAULT_MEMORY_MIN_CONFIDENCE,
+    DEFAULT_MEMORY_SEARCH_LIMIT,
+    DEFAULT_MEMORY_USER_ID,
     DEFAULT_MODEL_NAME,
     DEFAULT_POSTGRES_DB,
     DEFAULT_POSTGRES_MANAGED,
@@ -42,6 +53,7 @@ from zharness.config.settings import (
     DockerSandboxSettings,
     LangsmithSettings,
     LocalSandboxSettings,
+    MemorySettings,
     ModelSettings,
     PostgresSettings,
     SandboxSettings,
@@ -135,6 +147,17 @@ def _pick_int(name: str, yaml_value: Any, default: int) -> int:
     return default
 
 
+def _pick_float(name: str, yaml_value: Any, default: float) -> float:
+    """Resolve a float setting: environment, then YAML, then default. / 解析浮点配置：环境变量优先，其次 YAML，最后默认值。"""
+
+    env_value = _env(name)
+    if env_value is not None:
+        return float(env_value)
+    if yaml_value is not None:
+        return float(yaml_value)
+    return default
+
+
 def load_settings(path: str | Path | None = None) -> Settings:
     """Load settings, applying environment-variable overrides on top of YAML. / 加载配置，在 YAML 之上应用环境变量覆盖。"""
 
@@ -150,6 +173,7 @@ def load_settings(path: str | Path | None = None) -> Settings:
     local = sandbox.get("local") or {}
     postgres = data.get("postgres") or {}
     skills = data.get("skills") or {}
+    memory = data.get("memory") or {}
     langsmith = data.get("langsmith") or {}
 
     return Settings(
@@ -264,6 +288,63 @@ def load_settings(path: str | Path | None = None) -> Settings:
         ),
         skills=SkillsSettings(
             path=_pick(ZHARNESS_SKILLS_PATH_ENV, skills.get("path"), None),
+        ),
+        memory=MemorySettings(
+            enabled=_pick_bool(
+                "ZHARNESS_MEMORY_ENABLED",
+                memory.get("enabled"),
+                DEFAULT_MEMORY_ENABLED,
+            ),
+            user_id=_pick(
+                "ZHARNESS_MEMORY_USER_ID",
+                memory.get("user_id"),
+                DEFAULT_MEMORY_USER_ID,
+            ),
+            max_facts=_pick_int(
+                "ZHARNESS_MEMORY_MAX_FACTS",
+                memory.get("max_facts"),
+                DEFAULT_MEMORY_MAX_FACTS,
+            ),
+            min_confidence=_pick_float(
+                "ZHARNESS_MEMORY_MIN_CONFIDENCE",
+                memory.get("min_confidence"),
+                DEFAULT_MEMORY_MIN_CONFIDENCE,
+            ),
+            inject_top_k=_pick_int(
+                "ZHARNESS_MEMORY_INJECT_TOP_K",
+                memory.get("inject_top_k"),
+                DEFAULT_MEMORY_INJECT_TOP_K,
+            ),
+            search_limit=_pick_int(
+                "ZHARNESS_MEMORY_SEARCH_LIMIT",
+                memory.get("search_limit"),
+                DEFAULT_MEMORY_SEARCH_LIMIT,
+            ),
+            gate_enabled=_pick_bool(
+                "ZHARNESS_MEMORY_GATE_ENABLED",
+                memory.get("gate_enabled"),
+                DEFAULT_MEMORY_GATE_ENABLED,
+            ),
+            extraction_enabled=_pick_bool(
+                "ZHARNESS_MEMORY_EXTRACTION_ENABLED",
+                memory.get("extraction_enabled"),
+                DEFAULT_MEMORY_EXTRACTION_ENABLED,
+            ),
+            extraction_model=_pick(
+                "ZHARNESS_MEMORY_EXTRACTION_MODEL",
+                memory.get("extraction_model"),
+                DEFAULT_MEMORY_EXTRACTION_MODEL,
+            ),
+            injection_enabled=_pick_bool(
+                "ZHARNESS_MEMORY_INJECTION_ENABLED",
+                memory.get("injection_enabled"),
+                DEFAULT_MEMORY_INJECTION_ENABLED,
+            ),
+            injection_max_chars=_pick_int(
+                "ZHARNESS_MEMORY_INJECTION_MAX_CHARS",
+                memory.get("injection_max_chars"),
+                DEFAULT_MEMORY_INJECTION_MAX_CHARS,
+            ),
         ),
         langsmith=LangsmithSettings(
             tracing=_pick_bool("LANGSMITH_TRACING", langsmith.get("tracing"), False),
