@@ -476,16 +476,23 @@ def test_skills_mount_rejects_escape_through_symlink(tmp_path: Path) -> None:
         sandbox.resolve_path("/mnt/skills/public/data-analysis/escape/secret.txt")
 
 
-def test_local_manager_passes_skills_root(tmp_path: Path) -> None:
+def test_local_manager_mounts_only_enabled_skills(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("ZHARNESS_HOME", str(tmp_path))
     skills = tmp_path / "skills"
     _write_skill(skills, "public", "data-analysis")
+    _write_skill(skills, "public", "deep-research")
+    from zharness.skills.state import SkillState
+
+    SkillState(tmp_path / "skills_state.json").set_enabled("deep-research", False)
     manager = LocalSandboxManager(
         settings=LocalSandboxSettings(root=str(tmp_path), skills_root=str(skills))
     )
 
     sandbox = manager.for_thread("thread-a")
 
-    assert sandbox.skills_root == skills.resolve()
+    assert sandbox.skills_root is not None
+    assert (sandbox.skills_root / "public" / "data-analysis" / SKILL_MD_FILE).is_file()
+    assert not (sandbox.skills_root / "public" / "deep-research").exists()
 
 
 @pytest.mark.parametrize("quote", ["", "'", '"'])

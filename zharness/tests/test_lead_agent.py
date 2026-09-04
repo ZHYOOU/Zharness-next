@@ -104,6 +104,34 @@ def test_create_lead_agent_registers_describe_skill_when_skills_exist(
     assert "describe_skill" in agent.nodes["tools"].bound.tools_by_name
 
 
+def test_create_lead_agent_omits_describe_skill_when_all_disabled(
+    tmp_path, monkeypatch
+) -> None:
+    skills_dir = tmp_path / "skills"
+    skill_dir = skills_dir / "public" / "deep-research"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\n"
+        "name: deep-research\n"
+        "description: Do web research.\n"
+        "---\n\n# Deep Research\n",
+        encoding="utf-8",
+    )
+    home = tmp_path / "home"
+    state = home / "skills_state.json"
+    state.parent.mkdir(parents=True)
+    state.write_text(
+        '{"version": 1, "skills": {"deep-research": false}}', encoding="utf-8"
+    )
+    monkeypatch.setenv("ZHARNESS_SKILLS_PATH", str(skills_dir))
+    monkeypatch.setenv("ZHARNESS_HOME", str(home))
+    model = FakeMessagesListChatModel(responses=[AIMessage(content="hello")])
+
+    agent = create_lead_agent(model)
+
+    assert "describe_skill" not in agent.nodes["tools"].bound.tools_by_name
+
+
 def _flaky_sandbox(attempts_before_success: int) -> tuple[SimpleNamespace, list[int]]:
     """Build a sandbox that raises on the first calls and then succeeds. / 构建一个前几次调用抛错、随后成功的沙箱。"""
     attempts: list[int] = []

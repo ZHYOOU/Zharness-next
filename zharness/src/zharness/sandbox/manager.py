@@ -84,7 +84,8 @@ class DockerSandboxManager:
             raise SandboxUnavailableError(
                 f"Could not resolve Docker sandbox image: {exc}"
             ) from exc
-        policy = self._policy_fingerprint(image_id)
+        skills_root = self._effective_skills_root()
+        policy = self._policy_fingerprint(image_id, skills_root=skills_root)
         with self._lock:
             try:
                 container = self.client.containers.get(name)
@@ -94,6 +95,7 @@ class DockerSandboxManager:
                     str(workspace),
                     image_id=image_id,
                     policy=policy,
+                    skills_root=skills_root,
                 )
                 container.reload()
                 if container.status != "running":
@@ -106,6 +108,7 @@ class DockerSandboxManager:
                         str(workspace),
                         image_id=image_id,
                         policy=policy,
+                        skills_root=skills_root,
                     )
                     created = True
                 except DockerException as exc:
@@ -121,6 +124,7 @@ class DockerSandboxManager:
                         str(workspace),
                         image_id=image_id,
                         policy=policy,
+                        skills_root=skills_root,
                     )
                 except DockerException as exc:
                     raise SandboxUnavailableError(
@@ -176,7 +180,26 @@ class DockerSandboxManager:
             return f"{os.getuid()}:{os.getgid()}"
         return None
 
-    def _policy_fingerprint(self, image_id: str) -> str:
+    def _effective_skills_root(self) -> str | None:
+        """Resolve the current filtered skills root, or ``None`` when absent.
+
+        The path is derived live so a runtime enable/disable change invalidates
+        the container policy and triggers a rebuild with the new mount.
+
+        解析当前的过滤技能根目录；不存在时返回 ``None``。路径按最新状态实时派生，
+        因此运行时的启停变更会使容器策略失效，并以新挂载重建容器。
+        """
+        if self.settings.skills_root is None:
+            return None
+        try:
+            from zharness.skills.effective import ensure_effective_skills_root
+
+            return ensure_effective_skills_root(self.settings.skills_root)
+        except Exception:
+            logger.exception("Failed to resolve effective skills root")
+            return self.settings.skills_root
+
+    def _policy_fingerprint(self, image_id: str, *, skills_root: str | None) -> str:
         """Hash every setting that affects sandbox isolation. / 对影响沙箱隔离的全部设置计算哈希。"""
         policy = {
             "version": POLICY_VERSION,
@@ -185,7 +208,7 @@ class DockerSandboxManager:
             "nano_cpus": self.settings.nano_cpus,
             "pids_limit": self.settings.pids_limit,
             "user": self._effective_user(),
-            "skills_root": self.settings.skills_root,
+            "skills_root": skills_root,
             "network_enabled": self.settings.network_enabled,
         }
         encoded = json.dumps(policy, sort_keys=True, separators=(",", ":")).encode()
@@ -199,14 +222,15 @@ class DockerSandboxManager:
         *,
         image_id: str,
         policy: str,
+        skills_root: str | None,
     ) -> Any:
         user = self._effective_user()
 
         volumes: dict[str, dict[str, str]] = {
             workspace: {"bind": "/workspace", "mode": "rw"}
         }
-        if self.settings.skills_root:
-            volumes[self.settings.skills_root] = {
+        if skills_root:
+            volumes[skills_root] = {
                 "bind": "/mnt/skills",
                 "mode": "ro",
             }
@@ -465,6 +489,7 @@ class DockerSandboxManager:
         *,
         image_id: str,
         policy: str,
+        skills_root: str | None,
     ) -> None:
         self._validate_ownership(container, thread_id, workspace)
 
@@ -483,10 +508,10 @@ class DockerSandboxManager:
         ]
         valid_skills_mount = (
             not skills_mounts
-            if self.settings.skills_root is None
+            if skills_root is None
             else len(skills_mounts) == 1
             and os.path.realpath(skills_mounts[0].get("Source", ""))
-            == os.path.realpath(self.settings.skills_root)
+            == os.path.realpath(skills_root)
             and skills_mounts[0].get("RW") is False
         )
         hardened = (

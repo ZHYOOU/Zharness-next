@@ -63,7 +63,7 @@ def build_describe_skill_tool(
           - "chart visualization" — 关键词搜索，最佳匹配（至多 5 个）。
           - "+podcast gen" — 名称必须包含 "podcast"，按剩余词排序（至多 5 个）。
         """
-        catalog = SkillCatalog(tuple(storage.load_skills()))
+        catalog = SkillCatalog(tuple(storage.load_skills(enabled_only=True)))
         matched = catalog.search(name)
         if not matched:
             return f"No skills matched: {name}"

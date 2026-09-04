@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+from dataclasses import replace
 from pathlib import Path
 
 from zharness.config.loader import get_settings
@@ -13,6 +14,7 @@ from zharness.skills.constants import (
     SKILL_MD_FILE,
 )
 from zharness.skills.parser import parse_skill_file
+from zharness.skills.state import SkillState
 from zharness.skills.types import Skill, SkillCategory
 
 logger = logging.getLogger(__name__)
@@ -88,6 +90,7 @@ class LocalSkillStorage:
         host_path: str | Path | None = None,
         *,
         container_path: str = DEFAULT_SKILLS_CONTAINER_PATH,
+        state: SkillState | None = None,
     ) -> None:
         self._host_root = (
             Path(host_path).expanduser().resolve(strict=False)
@@ -95,6 +98,7 @@ class LocalSkillStorage:
             else skills_root_path()
         )
         self._container_root = container_path
+        self._state = state
 
     def get_skills_root_path(self) -> Path:
         """Absolute host path to the skills root, used for sandbox mounts. / 技能根目录的绝对 host 路径，用于沙箱挂载。"""
@@ -137,8 +141,32 @@ class LocalSkillStorage:
                 )
         return found
 
+    def _skill_state(self) -> SkillState:
+        """Return the enablement state, resolving the default path lazily.
+
+        The default state file lives under ZHarness home and is shared across
+        all storages; the default path is resolved on first use so a later
+        ``ZHARNESS_HOME`` change still applies.
+
+        返回启停状态，延迟解析默认路径。默认状态文件位于 ZHarness home 下，在所有
+        storage 实例间共享；默认路径在首次使用时解析，以便之后的 ``ZHARNESS_HOME``
+        变更仍然生效。
+        """
+        if self._state is None:
+            self._state = SkillState()
+        return self._state
+
     def load_skills(self, *, enabled_only: bool = False) -> list[Skill]:
-        """Discover all skills, deduplicated by name and sorted. / 发现所有技能，按名称去重并排序。"""
+        """Discover all skills, deduplicated by name and sorted.
+
+        Each skill's ``enabled`` flag reflects the dynamic state store, so
+        disabled skills are still returned (with ``enabled=False``) unless
+        ``enabled_only`` is set.
+
+        发现所有技能，按名称去重并排序。每个技能的 ``enabled`` 标志反映动态状态存储，
+        因此被禁用的技能仍会返回（``enabled=False``），除非设置 ``enabled_only``。
+        """
+        enabled_map = self._skill_state().load()
         skills_by_name: dict[str, Skill] = {}
         for category, category_root, md_path in self._iter_skill_files():
             skill = parse_skill_file(
@@ -147,7 +175,9 @@ class LocalSkillStorage:
                 relative_path=md_path.parent.relative_to(category_root),
             )
             if skill:
-                skills_by_name[skill.name] = skill
+                skills_by_name[skill.name] = replace(
+                    skill, enabled=enabled_map.get(skill.name, True)
+                )
 
         skills = list(skills_by_name.values())
         if enabled_only:

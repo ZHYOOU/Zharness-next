@@ -241,7 +241,9 @@ def _valid_container_attrs(
             "Labels": {
                 SANDBOX_LABEL: "true",
                 THREAD_LABEL: "thread-one",
-                POLICY_LABEL: manager._policy_fingerprint(image_id),
+                POLICY_LABEL: manager._policy_fingerprint(
+                    image_id, skills_root=manager._effective_skills_root()
+                ),
             },
             "User": "1000:1000",
         },
@@ -263,7 +265,21 @@ def _valid_container_attrs(
 def test_manager_creates_hardened_thread_container(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("ZHARNESS_HOME", str(tmp_path))
     skills = tmp_path / "skills"
-    skills.mkdir()
+    keep = skills / "public" / "data-analysis"
+    keep.mkdir(parents=True)
+    (keep / "SKILL.md").write_text(
+        "---\nname: data-analysis\ndescription: Analyze data.\n---\n# Data\n",
+        encoding="utf-8",
+    )
+    drop = skills / "public" / "deep-research"
+    drop.mkdir(parents=True)
+    (drop / "SKILL.md").write_text(
+        "---\nname: deep-research\ndescription: Research.\n---\n# Research\n",
+        encoding="utf-8",
+    )
+    from zharness.skills.state import SkillState
+
+    SkillState(tmp_path / "skills_state.json").set_enabled("deep-research", False)
     monkeypatch.setenv("ZHARNESS_SKILLS_PATH", str(skills))
     containers = FakeContainers()
     client = _fake_client(containers)
@@ -276,10 +292,14 @@ def test_manager_creates_hardened_thread_container(tmp_path: Path, monkeypatch) 
     options = containers.run_options
     assert options is not None
     workspace = str(tmp_path / "workspaces" / "thread-one")
+    effective_root = manager._effective_skills_root()
+    assert effective_root is not None
     assert options["volumes"] == {
         workspace: {"bind": "/workspace", "mode": "rw"},
-        str(skills.resolve()): {"bind": "/mnt/skills", "mode": "ro"},
+        effective_root: {"bind": "/mnt/skills", "mode": "ro"},
     }
+    assert (Path(effective_root) / "public" / "data-analysis" / "SKILL.md").is_file()
+    assert not (Path(effective_root) / "public" / "deep-research").exists()
     assert options["network_mode"] == "bridge"
     assert options["read_only"] is True
     assert options["cap_drop"] == ["ALL"]
@@ -288,7 +308,9 @@ def test_manager_creates_hardened_thread_container(tmp_path: Path, monkeypatch) 
     assert options["labels"] == {
         SANDBOX_LABEL: "true",
         THREAD_LABEL: "thread-one",
-        POLICY_LABEL: manager._policy_fingerprint("sha256:image-one"),
+        POLICY_LABEL: manager._policy_fingerprint(
+            "sha256:image-one", skills_root=manager._effective_skills_root()
+        ),
     }
 
 

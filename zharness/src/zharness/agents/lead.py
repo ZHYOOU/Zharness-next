@@ -265,7 +265,7 @@ def create_lead_agent(
     timezone = get_settings().timezone
 
     storage = LocalSkillStorage()
-    skills = storage.load_skills()
+    skills = storage.load_skills(enabled_only=True)
     if skills:
         tools.append(build_describe_skill_tool(storage))
         skill_section = get_skill_index_prompt_section(

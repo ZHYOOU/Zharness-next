@@ -877,6 +877,25 @@ class LocalSandboxManager:
         self._lock = threading.Lock()
         self._sandboxes: dict[str, LocalSandbox] = {}
 
+    def _effective_skills_root(self) -> str | None:
+        """Resolve the current filtered skills root, or ``None`` when absent.
+
+        The path is derived live so a runtime enable/disable change takes
+        effect for threads whose sandbox has not been created yet.
+
+        解析当前的过滤技能根目录；不存在时返回 ``None``。路径按最新状态实时派生，
+        因此运行时的启停变更会对尚未创建沙箱的线程生效。
+        """
+        if self.settings.skills_root is None:
+            return None
+        try:
+            from zharness.skills.effective import ensure_effective_skills_root
+
+            return ensure_effective_skills_root(self.settings.skills_root)
+        except Exception:
+            logger.exception("Failed to resolve effective skills root")
+            return self.settings.skills_root
+
     def for_thread(self, thread_id: str) -> LocalSandbox:
         """Return the local sandbox for a thread, creating it on first use. / 返回线程的本地沙箱，首次使用时创建。"""
         with self._lock:
@@ -890,7 +909,7 @@ class LocalSandboxManager:
                 sandbox = LocalSandbox(
                     root,
                     allow_host_bash=self.settings.allow_host_bash,
-                    skills_root=self.settings.skills_root,
+                    skills_root=self._effective_skills_root(),
                 )
                 self._sandboxes[thread_id] = sandbox
             return sandbox
