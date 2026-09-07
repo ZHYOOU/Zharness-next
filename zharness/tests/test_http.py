@@ -8,6 +8,16 @@ from zharness.server import http as http_module
 from zharness.server.http import ThreadSandboxCleanupMiddleware, lifespan
 
 
+@pytest.fixture(autouse=True)
+def disable_knowledge(monkeypatch) -> None:
+    """Keep sandbox lifecycle tests independent from knowledge storage.
+
+    让沙箱生命周期测试不依赖知识库存储。
+    """
+    settings = SimpleNamespace(knowledge=SimpleNamespace(enabled=False))
+    monkeypatch.setattr(http_module, "get_settings", lambda: settings)
+
+
 class FakeManager:
     def __init__(self) -> None:
         self.removed: list[str] = []
@@ -66,6 +76,44 @@ async def test_successful_thread_delete_removes_sandbox(monkeypatch) -> None:
 
     assert manager.removed == ["thread-one"]
     assert messages[0]["status"] == 204
+
+
+@pytest.mark.asyncio
+async def test_successful_thread_delete_removes_knowledge(monkeypatch) -> None:
+    manager = FakeManager()
+    deleted: list[str] = []
+
+    class FakeKnowledgeService:
+        async def delete_thread(self, thread_id: str) -> int:
+            deleted.append(thread_id)
+            return 1
+
+    settings = SimpleNamespace(knowledge=SimpleNamespace(enabled=True))
+    monkeypatch.setattr(http_module, "get_settings", lambda: settings)
+    monkeypatch.setattr(http_module, "get_sandbox_manager", lambda: manager)
+    monkeypatch.setattr(
+        http_module,
+        "get_knowledge_service",
+        lambda: FakeKnowledgeService(),
+    )
+
+    async def run_immediately(function, *args):
+        return function(*args)
+
+    monkeypatch.setattr(http_module.asyncio, "to_thread", run_immediately)
+
+    async def app(scope: Scope, receive: Receive, send: Send) -> None:
+        await send({"type": "http.response.start", "status": 204, "headers": []})
+        await send({"type": "http.response.body", "body": b""})
+
+    middleware = ThreadSandboxCleanupMiddleware(app)
+
+    async def send(message: Message) -> None:
+        pass
+
+    await middleware(_scope(), _receive, send)
+
+    assert deleted == ["thread-one"]
 
 
 @pytest.mark.asyncio
@@ -150,6 +198,39 @@ async def test_lifespan_shuts_down_all_sandboxes(monkeypatch) -> None:
         assert calls == []
 
     assert calls == ["shutdown"]
+
+
+@pytest.mark.asyncio
+async def test_lifespan_initializes_and_closes_knowledge(monkeypatch) -> None:
+    manager = FakeManager()
+    events: list[str] = []
+
+    class FakeKnowledgeService:
+        async def initialize(self) -> None:
+            events.append("initialize")
+
+    settings = SimpleNamespace(knowledge=SimpleNamespace(enabled=True))
+    monkeypatch.setattr(http_module, "get_settings", lambda: settings)
+    monkeypatch.setattr(http_module, "get_sandbox_manager", lambda: manager)
+    monkeypatch.setattr(
+        http_module,
+        "get_knowledge_service",
+        lambda: FakeKnowledgeService(),
+    )
+
+    async def close_service() -> None:
+        events.append("close")
+
+    async def run_immediately(function, *args):
+        return function(*args)
+
+    monkeypatch.setattr(http_module, "close_knowledge_service", close_service)
+    monkeypatch.setattr(http_module.asyncio, "to_thread", run_immediately)
+
+    async with lifespan(http_module.app):
+        assert events == ["initialize"]
+
+    assert events == ["initialize", "close"]
 
 
 @pytest.mark.asyncio

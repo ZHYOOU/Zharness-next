@@ -28,6 +28,8 @@ ZHarness Next 是一个面向 AI 编程场景的 Agent 运行底座。它基于 
 - 长期记忆存储在 PostgreSQL 中：每轮结束后自动抽取事实，经确定性写入闸门过滤、
   内容去重、混合驱逐评分限容，并以隐藏上下文与 `memory_search`/`memory_add`/
   `memory_update`/`memory_delete` 工具的形式呈现给 agent。
+- 线程级 RAG 知识库由 pgvector 和阿里 `text-embedding-v4` 支撑，支持可配置的
+  LangChain 检索策略以及稠密向量/全文检索融合。
 - 支持按空闲时间和数量上限自动回收 Docker 沙箱，删除 thread 时完整清理资源，
   服务正常关闭时删除全部沙箱容器。
 

@@ -22,6 +22,27 @@ from typing import Any, Final
 import yaml
 
 from zharness.config.settings import (
+    DEFAULT_KNOWLEDGE_CHUNK_OVERLAP,
+    DEFAULT_KNOWLEDGE_CHUNK_SIZE,
+    DEFAULT_KNOWLEDGE_EMBEDDING_BATCH_SIZE,
+    DEFAULT_KNOWLEDGE_EMBEDDING_DIMENSIONS,
+    DEFAULT_KNOWLEDGE_EMBEDDING_MAX_RETRIES,
+    DEFAULT_KNOWLEDGE_EMBEDDING_MODEL,
+    DEFAULT_KNOWLEDGE_EMBEDDING_TIMEOUT_SECONDS,
+    DEFAULT_KNOWLEDGE_ENABLED,
+    DEFAULT_KNOWLEDGE_FETCH_K,
+    DEFAULT_KNOWLEDGE_FUSION_FUNCTION,
+    DEFAULT_KNOWLEDGE_HYBRID_ENABLED,
+    DEFAULT_KNOWLEDGE_LAMBDA_MULT,
+    DEFAULT_KNOWLEDGE_MAX_CHUNKS_PER_DOCUMENT,
+    DEFAULT_KNOWLEDGE_MAX_CONTEXT_CHARS,
+    DEFAULT_KNOWLEDGE_MAX_FILE_BYTES,
+    DEFAULT_KNOWLEDGE_MAX_FILES_PER_CALL,
+    DEFAULT_KNOWLEDGE_PRIMARY_TOP_K,
+    DEFAULT_KNOWLEDGE_RESULT_LIMIT,
+    DEFAULT_KNOWLEDGE_RRF_K,
+    DEFAULT_KNOWLEDGE_SEARCH_TYPE,
+    DEFAULT_KNOWLEDGE_SECONDARY_TOP_K,
     DEFAULT_MEMORY_ENABLED,
     DEFAULT_MEMORY_EXTRACTION_ENABLED,
     DEFAULT_MEMORY_EXTRACTION_MODEL,
@@ -51,6 +72,12 @@ from zharness.config.settings import (
     DEFAULT_SERVER_PORT,
     DEFAULT_TIMEZONE,
     DockerSandboxSettings,
+    KnowledgeChunkingSettings,
+    KnowledgeEmbeddingSettings,
+    KnowledgeHybridSettings,
+    KnowledgeLimitsSettings,
+    KnowledgeRetrievalSettings,
+    KnowledgeSettings,
     LangsmithSettings,
     LocalSandboxSettings,
     MemorySettings,
@@ -174,6 +201,16 @@ def load_settings(path: str | Path | None = None) -> Settings:
     postgres = data.get("postgres") or {}
     skills = data.get("skills") or {}
     memory = data.get("memory") or {}
+    knowledge = data.get("knowledge") or {}
+    knowledge_embedding = knowledge.get("embedding") or {}
+    knowledge_chunking = knowledge.get("chunking") or {}
+    knowledge_retrieval = knowledge.get("retrieval") or {}
+    knowledge_search_kwargs = knowledge_retrieval.get("search_kwargs") or {}
+    knowledge_hybrid = knowledge_retrieval.get("hybrid") or {}
+    knowledge_fusion_parameters = (
+        knowledge_hybrid.get("fusion_function_parameters") or {}
+    )
+    knowledge_limits = knowledge.get("limits") or {}
     langsmith = data.get("langsmith") or {}
 
     return Settings(
@@ -344,6 +381,151 @@ def load_settings(path: str | Path | None = None) -> Settings:
                 "ZHARNESS_MEMORY_INJECTION_MAX_CHARS",
                 memory.get("injection_max_chars"),
                 DEFAULT_MEMORY_INJECTION_MAX_CHARS,
+            ),
+        ),
+        knowledge=KnowledgeSettings(
+            enabled=_pick_bool(
+                "ZHARNESS_KNOWLEDGE_ENABLED",
+                knowledge.get("enabled"),
+                DEFAULT_KNOWLEDGE_ENABLED,
+            ),
+            embedding=KnowledgeEmbeddingSettings(
+                model=_pick(
+                    "ZHARNESS_KNOWLEDGE_EMBEDDING_MODEL",
+                    knowledge_embedding.get("model"),
+                    DEFAULT_KNOWLEDGE_EMBEDDING_MODEL,
+                )
+                or DEFAULT_KNOWLEDGE_EMBEDDING_MODEL,
+                dimensions=_pick_int(
+                    "ZHARNESS_KNOWLEDGE_EMBEDDING_DIMENSIONS",
+                    knowledge_embedding.get("dimensions"),
+                    DEFAULT_KNOWLEDGE_EMBEDDING_DIMENSIONS,
+                ),
+                batch_size=_pick_int(
+                    "ZHARNESS_KNOWLEDGE_EMBEDDING_BATCH_SIZE",
+                    knowledge_embedding.get("batch_size"),
+                    DEFAULT_KNOWLEDGE_EMBEDDING_BATCH_SIZE,
+                ),
+                timeout_seconds=_pick_int(
+                    "ZHARNESS_KNOWLEDGE_EMBEDDING_TIMEOUT_SECONDS",
+                    knowledge_embedding.get("timeout_seconds"),
+                    DEFAULT_KNOWLEDGE_EMBEDDING_TIMEOUT_SECONDS,
+                ),
+                max_retries=_pick_int(
+                    "ZHARNESS_KNOWLEDGE_EMBEDDING_MAX_RETRIES",
+                    knowledge_embedding.get("max_retries"),
+                    DEFAULT_KNOWLEDGE_EMBEDDING_MAX_RETRIES,
+                ),
+            ),
+            chunking=KnowledgeChunkingSettings(
+                size_characters=_pick_int(
+                    "ZHARNESS_KNOWLEDGE_CHUNK_SIZE",
+                    knowledge_chunking.get("size_characters"),
+                    DEFAULT_KNOWLEDGE_CHUNK_SIZE,
+                ),
+                overlap_characters=_pick_int(
+                    "ZHARNESS_KNOWLEDGE_CHUNK_OVERLAP",
+                    knowledge_chunking.get("overlap_characters"),
+                    DEFAULT_KNOWLEDGE_CHUNK_OVERLAP,
+                ),
+                add_start_index=_pick_bool(
+                    "ZHARNESS_KNOWLEDGE_ADD_START_INDEX",
+                    knowledge_chunking.get("add_start_index"),
+                    True,
+                ),
+            ),
+            retrieval=KnowledgeRetrievalSettings(
+                search_type=_pick(
+                    "ZHARNESS_KNOWLEDGE_SEARCH_TYPE",
+                    knowledge_retrieval.get("search_type"),
+                    DEFAULT_KNOWLEDGE_SEARCH_TYPE,
+                )
+                or DEFAULT_KNOWLEDGE_SEARCH_TYPE,
+                result_limit=_pick_int(
+                    "ZHARNESS_KNOWLEDGE_RESULT_LIMIT",
+                    knowledge_search_kwargs.get("k"),
+                    DEFAULT_KNOWLEDGE_RESULT_LIMIT,
+                ),
+                fetch_k=_pick_int(
+                    "ZHARNESS_KNOWLEDGE_FETCH_K",
+                    knowledge_search_kwargs.get("fetch_k"),
+                    DEFAULT_KNOWLEDGE_FETCH_K,
+                ),
+                lambda_mult=_pick_float(
+                    "ZHARNESS_KNOWLEDGE_LAMBDA_MULT",
+                    knowledge_search_kwargs.get("lambda_mult"),
+                    DEFAULT_KNOWLEDGE_LAMBDA_MULT,
+                ),
+                score_threshold=(
+                    _pick_float(
+                        "ZHARNESS_KNOWLEDGE_SCORE_THRESHOLD",
+                        knowledge_search_kwargs.get("score_threshold"),
+                        0.0,
+                    )
+                    if _env("ZHARNESS_KNOWLEDGE_SCORE_THRESHOLD") is not None
+                    or knowledge_search_kwargs.get("score_threshold") is not None
+                    else None
+                ),
+                max_context_chars=_pick_int(
+                    "ZHARNESS_KNOWLEDGE_MAX_CONTEXT_CHARS",
+                    knowledge_retrieval.get("max_context_chars"),
+                    DEFAULT_KNOWLEDGE_MAX_CONTEXT_CHARS,
+                ),
+                hybrid=KnowledgeHybridSettings(
+                    enabled=_pick_bool(
+                        "ZHARNESS_KNOWLEDGE_HYBRID_ENABLED",
+                        knowledge_hybrid.get("enabled"),
+                        DEFAULT_KNOWLEDGE_HYBRID_ENABLED,
+                    ),
+                    fusion_function=_pick(
+                        "ZHARNESS_KNOWLEDGE_FUSION_FUNCTION",
+                        knowledge_hybrid.get("fusion_function"),
+                        DEFAULT_KNOWLEDGE_FUSION_FUNCTION,
+                    )
+                    or DEFAULT_KNOWLEDGE_FUSION_FUNCTION,
+                    primary_top_k=_pick_int(
+                        "ZHARNESS_KNOWLEDGE_PRIMARY_TOP_K",
+                        knowledge_hybrid.get("primary_top_k"),
+                        DEFAULT_KNOWLEDGE_PRIMARY_TOP_K,
+                    ),
+                    secondary_top_k=_pick_int(
+                        "ZHARNESS_KNOWLEDGE_SECONDARY_TOP_K",
+                        knowledge_hybrid.get("secondary_top_k"),
+                        DEFAULT_KNOWLEDGE_SECONDARY_TOP_K,
+                    ),
+                    rrf_k=_pick_float(
+                        "ZHARNESS_KNOWLEDGE_RRF_K",
+                        knowledge_fusion_parameters.get("rrf_k"),
+                        DEFAULT_KNOWLEDGE_RRF_K,
+                    ),
+                    primary_weight=_pick_float(
+                        "ZHARNESS_KNOWLEDGE_PRIMARY_WEIGHT",
+                        knowledge_fusion_parameters.get("primary_results_weight"),
+                        0.5,
+                    ),
+                    secondary_weight=_pick_float(
+                        "ZHARNESS_KNOWLEDGE_SECONDARY_WEIGHT",
+                        knowledge_fusion_parameters.get("secondary_results_weight"),
+                        0.5,
+                    ),
+                ),
+            ),
+            limits=KnowledgeLimitsSettings(
+                max_file_bytes=_pick_int(
+                    "ZHARNESS_KNOWLEDGE_MAX_FILE_BYTES",
+                    knowledge_limits.get("max_file_bytes"),
+                    DEFAULT_KNOWLEDGE_MAX_FILE_BYTES,
+                ),
+                max_files_per_call=_pick_int(
+                    "ZHARNESS_KNOWLEDGE_MAX_FILES_PER_CALL",
+                    knowledge_limits.get("max_files_per_call"),
+                    DEFAULT_KNOWLEDGE_MAX_FILES_PER_CALL,
+                ),
+                max_chunks_per_document=_pick_int(
+                    "ZHARNESS_KNOWLEDGE_MAX_CHUNKS_PER_DOCUMENT",
+                    knowledge_limits.get("max_chunks_per_document"),
+                    DEFAULT_KNOWLEDGE_MAX_CHUNKS_PER_DOCUMENT,
+                ),
             ),
         ),
         langsmith=LangsmithSettings(

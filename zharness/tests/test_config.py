@@ -48,6 +48,31 @@ _ZHARNESS_ENV_VARS = (
     "ZHARNESS_MEMORY_EXTRACTION_MODEL",
     "ZHARNESS_MEMORY_INJECTION_ENABLED",
     "ZHARNESS_MEMORY_INJECTION_MAX_CHARS",
+    "ZHARNESS_KNOWLEDGE_ENABLED",
+    "ZHARNESS_KNOWLEDGE_EMBEDDING_MODEL",
+    "ZHARNESS_KNOWLEDGE_EMBEDDING_DIMENSIONS",
+    "ZHARNESS_KNOWLEDGE_EMBEDDING_BATCH_SIZE",
+    "ZHARNESS_KNOWLEDGE_EMBEDDING_TIMEOUT_SECONDS",
+    "ZHARNESS_KNOWLEDGE_EMBEDDING_MAX_RETRIES",
+    "ZHARNESS_KNOWLEDGE_CHUNK_SIZE",
+    "ZHARNESS_KNOWLEDGE_CHUNK_OVERLAP",
+    "ZHARNESS_KNOWLEDGE_ADD_START_INDEX",
+    "ZHARNESS_KNOWLEDGE_SEARCH_TYPE",
+    "ZHARNESS_KNOWLEDGE_RESULT_LIMIT",
+    "ZHARNESS_KNOWLEDGE_FETCH_K",
+    "ZHARNESS_KNOWLEDGE_LAMBDA_MULT",
+    "ZHARNESS_KNOWLEDGE_SCORE_THRESHOLD",
+    "ZHARNESS_KNOWLEDGE_MAX_CONTEXT_CHARS",
+    "ZHARNESS_KNOWLEDGE_HYBRID_ENABLED",
+    "ZHARNESS_KNOWLEDGE_FUSION_FUNCTION",
+    "ZHARNESS_KNOWLEDGE_PRIMARY_TOP_K",
+    "ZHARNESS_KNOWLEDGE_SECONDARY_TOP_K",
+    "ZHARNESS_KNOWLEDGE_RRF_K",
+    "ZHARNESS_KNOWLEDGE_PRIMARY_WEIGHT",
+    "ZHARNESS_KNOWLEDGE_SECONDARY_WEIGHT",
+    "ZHARNESS_KNOWLEDGE_MAX_FILE_BYTES",
+    "ZHARNESS_KNOWLEDGE_MAX_FILES_PER_CALL",
+    "ZHARNESS_KNOWLEDGE_MAX_CHUNKS_PER_DOCUMENT",
     "LANGSMITH_TRACING",
     "LANGSMITH_PROJECT",
 )
@@ -107,6 +132,15 @@ def test_defaults_without_config_file(tmp_path: Path) -> None:
     assert settings.memory.extraction_model is None
     assert settings.memory.injection_enabled is True
     assert settings.memory.injection_max_chars == 2000
+    assert settings.knowledge.enabled is True
+    assert settings.knowledge.embedding.model == "text-embedding-v4"
+    assert settings.knowledge.embedding.dimensions == 1024
+    assert settings.knowledge.embedding.batch_size == 10
+    assert settings.knowledge.retrieval.search_type == "similarity"
+    assert settings.knowledge.retrieval.hybrid.enabled is True
+    assert (
+        settings.knowledge.retrieval.hybrid.fusion_function == "reciprocal_rank_fusion"
+    )
     assert settings.langsmith.tracing is False
     assert settings.langsmith.project is None
 
@@ -224,6 +258,31 @@ sandbox:
     assert settings.sandbox.docker.user == "2000:2000"
     assert settings.sandbox.docker.network_enabled is False
     assert settings.sandbox.docker.max_containers == 7
+
+
+def test_knowledge_retrieval_strategy_can_switch_to_mmr(tmp_path: Path) -> None:
+    path = _write_config(
+        tmp_path,
+        """
+knowledge:
+  retrieval:
+    search_type: mmr
+    search_kwargs:
+      k: 8
+      fetch_k: 31
+      lambda_mult: 0.25
+    hybrid:
+      enabled: false
+""",
+    )
+
+    settings = load_settings(path).knowledge.retrieval
+
+    assert settings.search_type == "mmr"
+    assert settings.result_limit == 8
+    assert settings.fetch_k == 31
+    assert settings.lambda_mult == 0.25
+    assert settings.hybrid.enabled is False
 
 
 def test_boolean_environment_parsing(monkeypatch, tmp_path: Path) -> None:

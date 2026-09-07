@@ -17,6 +17,7 @@ src/zharness/
 │   └── settings.py          # 类型化配置数据类
 ├── host/
 │   └── paths.py             # 数据 home 与线程工作区路径解析
+├── knowledge/               # 线程级 RAG 导入与检索
 ├── models/
 │   └── factory.py           # Chat Model 工厂
 ├── sandbox/
@@ -61,6 +62,10 @@ src/zharness/
 | `grep_files` | 在工作区文本文件中搜索字面字符串 |
 | `execute_command` | 从虚拟工作区 `cwd` 执行 Shell 命令 |
 | `describe_skill` | 获取已安装技能的元数据（存在技能时才注册） |
+| `knowledge_search` | 搜索当前 thread 已索引的参考资料 |
+| `knowledge_ingest` | 索引当前 thread 的 `/workspace` UTF-8 文件 |
+| `knowledge_list` | 列出当前 thread 的知识文档 |
+| `knowledge_delete` | 删除当前 thread 的知识文档 |
 
 Agent 同时启用了：
 
@@ -96,6 +101,27 @@ config = {"configurable": {"approval_strategy": "require_approval"}}
 非敏感配置位于本包旁的 `config.yaml`；密钥保留在 `langgraph.json` 加载的 `.env` 中。
 `zharness.config.loader` 按以下优先级解析每个值：环境变量 → YAML → 内置默认值。
 这样 `ZHARNESS_HOME` 等临时覆盖仍可作为环境变量使用，同时 `config.yaml` 成为主要配置面。
+
+## 会话知识库
+
+可选的 `knowledge` 子系统为当前 thread 工作区文件提供 RAG。它使用阿里
+`text-embedding-v4`、PostgreSQL/pgvector、`langchain-postgres` 与
+`langchain-text-splitters`，默认融合稠密向量和 PostgreSQL 全文检索结果。所有操作都从
+服务端运行时取得 `thread_id`，因此工具 schema 不包含该参数，模型无法覆盖会话边界。
+删除 thread 时也会删除其索引文档。
+
+在 `.env` 中配置嵌入接口凭据：
+
+```dotenv
+EMBEDDING_BASE_URL=https://your-endpoint.example/compatible-mode/v1
+EMBEDDING_API_KEY=your-api-key
+```
+
+无需修改工具或重建已有向量，即可在 `config.yaml` 中切换检索策略。支持的 LangChain
+`search_type` 为 `similarity`、`similarity_score_threshold` 和 `mmr`。混合检索是
+`similarity` 的可选配置；切换到另外两种策略前须将其关闭。融合函数支持
+`reciprocal_rank_fusion` 和 `weighted_sum_ranking`。完整约束见
+[RAG 设计文档](docs/rag-knowledge-base-design.zh-CN.md)。
 
 ## 模型配置
 

@@ -16,6 +16,12 @@ from zharness.config.loader import (
 )
 from zharness.config.settings import (
     DockerSandboxSettings,
+    KnowledgeChunkingSettings,
+    KnowledgeEmbeddingSettings,
+    KnowledgeHybridSettings,
+    KnowledgeLimitsSettings,
+    KnowledgeRetrievalSettings,
+    KnowledgeSettings,
     LangsmithSettings,
     LocalSandboxSettings,
     MemorySettings,
@@ -30,6 +36,12 @@ from zharness.config.settings import (
 __all__ = [
     "DEFAULT_CONFIG_FILE",
     "DockerSandboxSettings",
+    "KnowledgeChunkingSettings",
+    "KnowledgeEmbeddingSettings",
+    "KnowledgeHybridSettings",
+    "KnowledgeLimitsSettings",
+    "KnowledgeRetrievalSettings",
+    "KnowledgeSettings",
     "LangsmithSettings",
     "LocalSandboxSettings",
     "MemorySettings",

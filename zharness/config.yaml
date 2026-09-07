@@ -152,6 +152,43 @@ memory:
   # Maximum characters of the injected memory block. / 注入记忆块的最大字符数。
   injection_max_chars: 2000
 
+# Session-scoped RAG knowledge base. Embedding credentials stay in `.env` as
+# EMBEDDING_BASE_URL and EMBEDDING_API_KEY. / 会话级 RAG 知识库。嵌入接口凭据以
+# EMBEDDING_BASE_URL 和 EMBEDDING_API_KEY 保留在 `.env` 中。
+knowledge:
+  enabled: true
+  embedding:
+    model: text-embedding-v4
+    dimensions: 1024
+    batch_size: 10
+    timeout_seconds: 15
+    max_retries: 2
+  chunking:
+    size_characters: 2000
+    overlap_characters: 200
+    add_start_index: true
+  retrieval:
+    search_type: similarity
+    search_kwargs:
+      k: 6
+      fetch_k: 40
+      lambda_mult: 0.5
+      score_threshold: null
+    hybrid:
+      enabled: true
+      fusion_function: reciprocal_rank_fusion
+      primary_top_k: 40
+      secondary_top_k: 40
+      fusion_function_parameters:
+        rrf_k: 60
+        primary_results_weight: 0.5
+        secondary_results_weight: 0.5
+    max_context_chars: 12000
+  limits:
+    max_file_bytes: 5242880
+    max_files_per_call: 20
+    max_chunks_per_document: 1000
+
 # LangSmith observability. / LangSmith 可观测性。
 # Override with LANGSMITH_TRACING and LANGSMITH_PROJECT.
 # / 通过 LANGSMITH_TRACING 和 LANGSMITH_PROJECT 覆盖。

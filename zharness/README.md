@@ -18,6 +18,7 @@ src/zharness/
 │   └── settings.py          # Typed configuration dataclasses
 ├── host/
 │   └── paths.py             # Data home and thread workspace resolution
+├── knowledge/               # Thread-scoped RAG ingestion and retrieval
 ├── models/
 │   └── factory.py           # Chat model factory
 ├── sandbox/
@@ -62,6 +63,10 @@ src/zharness/
 | `grep_files` | Search workspace text files for a literal string |
 | `execute_command` | Run a shell command from a virtual workspace `cwd` |
 | `describe_skill` | Fetch metadata for installed skills (registered when skills exist) |
+| `knowledge_search` | Search indexed reference material for the current thread |
+| `knowledge_ingest` | Index current-thread `/workspace` UTF-8 files |
+| `knowledge_list` | List current-thread knowledge documents |
+| `knowledge_delete` | Delete a current-thread knowledge document |
 
 The agent also enables:
 
@@ -111,6 +116,29 @@ at the beginning of their message history. Set the IANA `timezone` value in
 `config.yaml`, or override it with `ZHARNESS_TIMEZONE`; the default is
 `Asia/Shanghai`. The reminder is reused during the same local day and replaced
 in place after midnight, so stale dates do not accumulate in the conversation.
+
+## Session Knowledge Base
+
+The optional `knowledge` subsystem provides RAG over files in the current
+thread workspace. It uses Alibaba `text-embedding-v4`, PostgreSQL/pgvector,
+`langchain-postgres`, and `langchain-text-splitters`. Dense and PostgreSQL full
+text results are fused by default. Every operation derives `thread_id` from
+the server runtime, so it is absent from all tool schemas and cannot be
+overridden by the model. Deleting a thread also removes its indexed documents.
+
+Put embedding credentials in `.env`:
+
+```dotenv
+EMBEDDING_BASE_URL=https://your-endpoint.example/compatible-mode/v1
+EMBEDDING_API_KEY=your-api-key
+```
+
+Retrieval can be switched in `config.yaml` without changing the tools or
+stored vectors. Supported LangChain `search_type` values are `similarity`,
+`similarity_score_threshold`, and `mmr`. Hybrid search is an option on
+`similarity`; disable it before selecting either of the other strategies.
+Fusion can use `reciprocal_rank_fusion` or `weighted_sum_ranking`. See the
+[RAG design](docs/rag-knowledge-base-design.zh-CN.md) for the complete contract.
 
 ## Model Configuration
 

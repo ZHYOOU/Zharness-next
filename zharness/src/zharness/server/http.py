@@ -8,7 +8,10 @@ from typing import Any
 from starlette.applications import Starlette
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from zharness.config import get_settings
 from zharness.host.paths import THREAD_ID_PATTERN, WorkspacePathError
+from zharness.knowledge import close_knowledge_service, get_knowledge_service
+from zharness.knowledge.service import KnowledgeUnavailableError
 from zharness.sandbox.manager import (
     SandboxUnavailableError,
     get_sandbox_manager,
@@ -70,6 +73,14 @@ class ThreadSandboxCleanupMiddleware:
                         "Failed to remove sandbox for deleted thread %s",
                         thread_id,
                     )
+                if get_settings().knowledge.enabled:
+                    try:
+                        await get_knowledge_service().delete_thread(thread_id)
+                    except KnowledgeUnavailableError:
+                        logger.exception(
+                            "Failed to remove knowledge for deleted thread %s",
+                            thread_id,
+                        )
             await send(message)
 
         await self.app(scope, receive, capture_status)
@@ -80,6 +91,8 @@ async def lifespan(_: Starlette) -> AsyncIterator[None]:
     """Run periodic sandbox cleanup and remove containers on shutdown. / 运行沙箱定期清理，并在关闭时删除容器。"""
 
     manager = get_sandbox_manager()
+    if get_settings().knowledge.enabled:
+        await get_knowledge_service().initialize()
     cleanup_stop = asyncio.Event()
     cleanup_task = None
     if callable(getattr(manager, "prune", None)):
@@ -98,6 +111,7 @@ async def lifespan(_: Starlette) -> AsyncIterator[None]:
             )
         except SandboxUnavailableError:
             logger.exception("Failed to shut down sandbox instances")
+        await close_knowledge_service()
 
 
 app = Starlette(lifespan=lifespan)

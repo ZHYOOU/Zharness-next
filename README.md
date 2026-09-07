@@ -38,6 +38,9 @@ future gateway layer.
   each turn, filtered by a deterministic write gate, deduplicated, capacity-capped
   with a hybrid eviction score, and surfaced as hidden context plus the
   `memory_search`/`memory_add`/`memory_update`/`memory_delete` tools.
+- Thread-scoped RAG knowledge backed by pgvector and Alibaba
+  `text-embedding-v4`, with configurable LangChain retrieval and hybrid
+  dense/full-text fusion.
 - Configurable idle/count-based Docker sandbox cleanup, full thread resource
   cleanup on deletion, and container removal during graceful shutdown.
 

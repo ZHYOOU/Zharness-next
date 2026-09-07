@@ -49,6 +49,10 @@ def test_create_lead_agent(tmp_path, monkeypatch) -> None:
         "memory_add",
         "memory_update",
         "memory_delete",
+        "knowledge_search",
+        "knowledge_ingest",
+        "knowledge_list",
+        "knowledge_delete",
     }
 
 
@@ -63,6 +67,21 @@ def test_create_lead_agent_omits_memory_tools_when_disabled(
 
     assert "memory_search" not in agent.nodes["tools"].bound.tools_by_name
     assert "memory_add" not in agent.nodes["tools"].bound.tools_by_name
+
+
+def test_create_lead_agent_omits_knowledge_tools_when_disabled(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("ZHARNESS_SKILLS_PATH", str(tmp_path / "no-skills"))
+    monkeypatch.setenv("ZHARNESS_KNOWLEDGE_ENABLED", "false")
+    model = ToolCallingFakeModel(responses=[AIMessage(content="hello")])
+
+    agent = create_lead_agent(model)
+
+    assert "knowledge_search" not in agent.nodes["tools"].bound.tools_by_name
+    assert "knowledge_ingest" not in agent.nodes["tools"].bound.tools_by_name
+    assert "knowledge_list" not in agent.nodes["tools"].bound.tools_by_name
+    assert "knowledge_delete" not in agent.nodes["tools"].bound.tools_by_name
 
 
 def test_lead_agent_persists_hidden_dynamic_date(tmp_path, monkeypatch) -> None:
