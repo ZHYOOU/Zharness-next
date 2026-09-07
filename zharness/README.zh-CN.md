@@ -73,6 +73,8 @@ Agent 同时启用了：
 - `TodoListMiddleware`：为多步骤任务维护 Todo 状态。
 - `SummarizationMiddleware`：根据模型上下文参数生成摘要；`mimo-v2.5` 在达到
   786,432 tokens 时触发，并保留最近 32 条消息。
+- `TitleMiddleware`：在首轮完整交互后将线程 `title` 写入状态。默认由首条用户
+  消息在本地派生标题；设置 `title.model_name` 可使用专用模型生成。
 - `HumanInTheLoopMiddleware`：为 `execute_command` 提供每次运行可选的
   `allow_all` 和 `require_approval` 策略，默认为 `allow_all`。
 - `ToolErrorMiddleware`：将工具失败格式化为可供模型修复并重试的信息。

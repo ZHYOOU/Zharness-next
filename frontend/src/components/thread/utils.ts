@@ -18,3 +18,13 @@ export function getContentString(content: Message["content"]): string {
     .map((c) => c.text);
   return texts.join(" ");
 }
+
+/**
+ * Returns whether a message is a hidden injected reminder (e.g. the dynamic
+ * current-date system reminder) that should not be rendered in the UI.
+ *
+ * 返回消息是否为不应在界面渲染的隐藏注入提醒（例如动态当前日期系统提醒）。
+ */
+export function isHiddenFromUi(message: Message): boolean {
+  return Boolean(message.additional_kwargs?.hide_from_ui);
+}

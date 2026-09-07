@@ -26,6 +26,7 @@ from zharness.middleware import (
     DynamicDateMiddleware,
     SubAgentMiddleware,
     SubAgentSpec,
+    TitleMiddleware,
 )
 from zharness.models.factory import create_chat_model
 from zharness.skills import (
@@ -352,6 +353,7 @@ def create_lead_agent(
             trigger=("tokens", summarization_trigger),
             keep=("messages", summarization_keep),
         ),
+        TitleMiddleware(title_settings=settings.title),
     ]
     memory_settings = get_settings().memory
     if memory_settings.enabled:

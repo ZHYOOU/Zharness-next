@@ -75,6 +75,9 @@ The agent also enables:
 - `SummarizationMiddleware`, which uses model-specific context parameters. For
   `mimo-v2.5`, it summarizes at 786,432 tokens and retains the 32 most recent
   messages.
+- `TitleMiddleware`, which writes a thread `title` into the state after the
+  first complete exchange. By default it derives the title from the first user
+  message locally; set `title.model_name` to use a dedicated model instead.
 - `HumanInTheLoopMiddleware`, which supports per-run `allow_all` and
   `require_approval` strategies for `execute_command`; `allow_all` is the
   default.

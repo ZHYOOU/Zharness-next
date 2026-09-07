@@ -71,6 +71,11 @@ from zharness.config.settings import (
     DEFAULT_SERVER_HOST,
     DEFAULT_SERVER_PORT,
     DEFAULT_TIMEZONE,
+    DEFAULT_TITLE_ENABLED,
+    DEFAULT_TITLE_MAX_CHARS,
+    DEFAULT_TITLE_MAX_WORDS,
+    DEFAULT_TITLE_MODEL_NAME,
+    DEFAULT_TITLE_PROMPT_TEMPLATE,
     DockerSandboxSettings,
     KnowledgeChunkingSettings,
     KnowledgeEmbeddingSettings,
@@ -87,6 +92,7 @@ from zharness.config.settings import (
     ServerSettings,
     Settings,
     SkillsSettings,
+    TitleSettings,
 )
 
 CONFIG_PATH_ENV: Final = "ZHARNESS_CONFIG"
@@ -201,6 +207,7 @@ def load_settings(path: str | Path | None = None) -> Settings:
     postgres = data.get("postgres") or {}
     skills = data.get("skills") or {}
     memory = data.get("memory") or {}
+    title = data.get("title") or {}
     knowledge = data.get("knowledge") or {}
     knowledge_embedding = knowledge.get("embedding") or {}
     knowledge_chunking = knowledge.get("chunking") or {}
@@ -381,6 +388,33 @@ def load_settings(path: str | Path | None = None) -> Settings:
                 "ZHARNESS_MEMORY_INJECTION_MAX_CHARS",
                 memory.get("injection_max_chars"),
                 DEFAULT_MEMORY_INJECTION_MAX_CHARS,
+            ),
+        ),
+        title=TitleSettings(
+            enabled=_pick_bool(
+                "ZHARNESS_TITLE_ENABLED",
+                title.get("enabled"),
+                DEFAULT_TITLE_ENABLED,
+            ),
+            max_words=_pick_int(
+                "ZHARNESS_TITLE_MAX_WORDS",
+                title.get("max_words"),
+                DEFAULT_TITLE_MAX_WORDS,
+            ),
+            max_chars=_pick_int(
+                "ZHARNESS_TITLE_MAX_CHARS",
+                title.get("max_chars"),
+                DEFAULT_TITLE_MAX_CHARS,
+            ),
+            model_name=_pick(
+                "ZHARNESS_TITLE_MODEL",
+                title.get("model_name"),
+                DEFAULT_TITLE_MODEL_NAME,
+            ),
+            prompt_template=_pick(
+                "ZHARNESS_TITLE_PROMPT_TEMPLATE",
+                title.get("prompt_template"),
+                DEFAULT_TITLE_PROMPT_TEMPLATE,
             ),
         ),
         knowledge=KnowledgeSettings(

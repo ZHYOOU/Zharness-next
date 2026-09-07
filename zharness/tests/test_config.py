@@ -132,6 +132,10 @@ def test_defaults_without_config_file(tmp_path: Path) -> None:
     assert settings.memory.extraction_model is None
     assert settings.memory.injection_enabled is True
     assert settings.memory.injection_max_chars == 2000
+    assert settings.title.enabled is True
+    assert settings.title.max_words == 6
+    assert settings.title.max_chars == 60
+    assert settings.title.model_name is None
     assert settings.knowledge.enabled is True
     assert settings.knowledge.embedding.model == "text-embedding-v4"
     assert settings.knowledge.embedding.dimensions == 1024
@@ -328,6 +332,21 @@ def test_memory_environment_overrides_yaml(monkeypatch, tmp_path: Path) -> None:
     assert settings.memory.user_id == "alice"
     assert settings.memory.extraction_model == "deepseek-chat"
     assert settings.memory.injection_max_chars == 1200
+
+
+def test_title_environment_overrides_yaml(monkeypatch, tmp_path: Path) -> None:
+    path = _write_config(tmp_path, "title:\n  enabled: false\n  max_words: 10\n")
+
+    monkeypatch.setenv("ZHARNESS_TITLE_ENABLED", "true")
+    monkeypatch.setenv("ZHARNESS_TITLE_MAX_WORDS", "8")
+    monkeypatch.setenv("ZHARNESS_TITLE_MAX_CHARS", "80")
+    monkeypatch.setenv("ZHARNESS_TITLE_MODEL", "deepseek-chat")
+
+    settings = load_settings(path)
+    assert settings.title.enabled is True
+    assert settings.title.max_words == 8
+    assert settings.title.max_chars == 80
+    assert settings.title.model_name == "deepseek-chat"
 
 
 def test_integer_environment_parsing(monkeypatch, tmp_path: Path) -> None:

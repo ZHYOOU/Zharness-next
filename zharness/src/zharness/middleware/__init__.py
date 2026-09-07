@@ -12,6 +12,7 @@ from zharness.middleware.subagents import (
     TaskToolSchema,
     create_sub_agent,
 )
+from zharness.middleware.title import TitleMiddleware
 
 __all__ = [
     "DEFAULT_MAX_CONCURRENT_SUBAGENTS",
@@ -23,5 +24,6 @@ __all__ = [
     "SubAgentMiddleware",
     "SubAgentSpec",
     "TaskToolSchema",
+    "TitleMiddleware",
     "create_sub_agent",
 ]

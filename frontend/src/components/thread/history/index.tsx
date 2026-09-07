@@ -3,7 +3,7 @@ import { useThreads } from "@/providers/Thread";
 import { Thread } from "@langchain/langgraph-sdk";
 import { MouseEvent, useEffect, useState } from "react";
 
-import { getContentString } from "../utils";
+import { getContentString, isHiddenFromUi } from "../utils";
 import { useQueryState, parseAsBoolean } from "nuqs";
 import {
   Sheet,
@@ -70,12 +70,23 @@ function ThreadList({
         if (
           typeof t.values === "object" &&
           t.values &&
-          "messages" in t.values &&
-          Array.isArray(t.values.messages) &&
-          t.values.messages?.length > 0
+          !Array.isArray(t.values)
         ) {
-          const firstMessage = t.values.messages[0];
-          itemText = getContentString(firstMessage.content);
+          const titled = t.values.title;
+          if (typeof titled === "string" && titled.trim()) {
+            itemText = titled;
+          } else if (
+            "messages" in t.values &&
+            Array.isArray(t.values.messages) &&
+            t.values.messages?.length > 0
+          ) {
+            const firstMessage = t.values.messages.find(
+              (msg) => !isHiddenFromUi(msg),
+            );
+            if (firstMessage) {
+              itemText = getContentString(firstMessage.content);
+            }
+          }
         }
         return (
           <div

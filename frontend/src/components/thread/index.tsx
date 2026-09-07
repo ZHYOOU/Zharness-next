@@ -12,6 +12,7 @@ import {
   DO_NOT_RENDER_ID_PREFIX,
   ensureToolCallsHaveResponses,
 } from "@/lib/ensure-tool-responses";
+import { isHiddenFromUi } from "./utils";
 import { LangGraphLogoSVG } from "../icons/langgraph";
 import { TooltipIconButton } from "./tooltip-icon-button";
 import {
@@ -400,7 +401,11 @@ export function Thread() {
               content={
                 <>
                   {messages
-                    .filter((m) => !m.id?.startsWith(DO_NOT_RENDER_ID_PREFIX))
+                    .filter(
+                      (m) =>
+                        !m.id?.startsWith(DO_NOT_RENDER_ID_PREFIX) &&
+                        !isHiddenFromUi(m),
+                    )
                     .map((message, index) =>
                       message.type === "human" ? (
                         <HumanMessage

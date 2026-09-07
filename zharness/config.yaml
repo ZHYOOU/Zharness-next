@@ -152,6 +152,36 @@ memory:
   # Maximum characters of the injected memory block. / 注入记忆块的最大字符数。
   injection_max_chars: 2000
 
+# Automatic thread title generation. After the first complete exchange the lead
+# agent writes a `title` into the thread state. When `model_name` is null a
+# local fallback derived from the first user message is used so streaming is
+# never blocked by a second model call.
+# / 自动线程标题生成。首轮完整交互后，主智能体将 `title` 写入线程状态。
+# 当 `model_name` 为 null 时使用首条用户消息派生的本地后备标题，从而避免二次
+# 模型调用阻塞流式输出。通过 ZHARNESS_TITLE_* 覆盖。
+title:
+  # Master switch. / 总开关。
+  # Override with ZHARNESS_TITLE_ENABLED. / 通过 ZHARNESS_TITLE_ENABLED 覆盖。
+  enabled: true
+  # Maximum number of words in the generated title. / 生成标题的最大单词数。
+  # Override with ZHARNESS_TITLE_MAX_WORDS. / 通过 ZHARNESS_TITLE_MAX_WORDS 覆盖。
+  max_words: 6
+  # Maximum number of characters in the title. / 标题的最大字符数。
+  # Override with ZHARNESS_TITLE_MAX_CHARS. / 通过 ZHARNESS_TITLE_MAX_CHARS 覆盖。
+  max_chars: 60
+  # Dedicated model name for LLM title generation; null uses the local fallback.
+  # / 标题生成的专用模型名；null 时使用本地后备标题。
+  # Override with ZHARNESS_TITLE_MODEL. / 通过 ZHARNESS_TITLE_MODEL 覆盖。
+  model_name: null
+  # Prompt template for LLM title generation. / 标题生成的提示词模板。
+  # Override with ZHARNESS_TITLE_PROMPT_TEMPLATE. / 通过 ZHARNESS_TITLE_PROMPT_TEMPLATE 覆盖。
+  prompt_template: >-
+    Generate a concise title (max {max_words} words) for this conversation.
+    User: {user_msg}
+    Assistant: {assistant_msg}
+
+    Return ONLY the title, no quotes, no explanation.
+
 # Session-scoped RAG knowledge base. Embedding credentials stay in `.env` as
 # EMBEDDING_BASE_URL and EMBEDDING_API_KEY. / 会话级 RAG 知识库。嵌入接口凭据以
 # EMBEDDING_BASE_URL 和 EMBEDDING_API_KEY 保留在 `.env` 中。

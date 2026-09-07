@@ -47,6 +47,16 @@ DEFAULT_MEMORY_EXTRACTION_MODEL = None
 DEFAULT_MEMORY_INJECTION_ENABLED = True
 DEFAULT_MEMORY_INJECTION_MAX_CHARS = 2000
 
+DEFAULT_TITLE_ENABLED = True
+DEFAULT_TITLE_MODEL_NAME = None
+DEFAULT_TITLE_MAX_WORDS = 6
+DEFAULT_TITLE_MAX_CHARS = 60
+DEFAULT_TITLE_PROMPT_TEMPLATE = (
+    "Generate a concise title (max {max_words} words) for this conversation.\n"
+    "User: {user_msg}\nAssistant: {assistant_msg}\n\n"
+    "Return ONLY the title, no quotes, no explanation."
+)
+
 DEFAULT_KNOWLEDGE_ENABLED = True
 DEFAULT_KNOWLEDGE_EMBEDDING_MODEL = "text-embedding-v4"
 DEFAULT_KNOWLEDGE_EMBEDDING_DIMENSIONS = 1024
@@ -209,6 +219,34 @@ class MemorySettings:
     extraction_model: str | None = DEFAULT_MEMORY_EXTRACTION_MODEL
     injection_enabled: bool = DEFAULT_MEMORY_INJECTION_ENABLED
     injection_max_chars: int = DEFAULT_MEMORY_INJECTION_MAX_CHARS
+
+
+@dataclass(frozen=True, slots=True)
+class TitleSettings:
+    """Automatic thread title generation settings. / 自动线程标题生成配置。
+
+    After the first complete exchange, the lead agent writes a `title` into the
+    thread state. When `model_name` is set, a dedicated model generates the
+    title; otherwise a local fallback derived from the first user message is
+    used so streaming is never blocked by a second model call.
+
+    首轮完整交互后，主智能体将 `title` 写入线程状态。设置 `model_name` 时使用
+    专用模型生成标题；否则使用由首条用户消息派生的本地后备标题，从而避免二次
+    模型调用阻塞流式输出。
+    """
+
+    enabled: bool = DEFAULT_TITLE_ENABLED
+    max_words: int = DEFAULT_TITLE_MAX_WORDS
+    max_chars: int = DEFAULT_TITLE_MAX_CHARS
+    model_name: str | None = DEFAULT_TITLE_MODEL_NAME
+    prompt_template: str = DEFAULT_TITLE_PROMPT_TEMPLATE
+
+    def __post_init__(self) -> None:
+        """Validate title limits. / 校验标题上限。"""
+        if self.max_words < 1:
+            raise ValueError("title max_words must be positive")
+        if self.max_chars < 1:
+            raise ValueError("title max_chars must be positive")
 
 
 @dataclass(frozen=True, slots=True)
@@ -381,5 +419,6 @@ class Settings:
     postgres: PostgresSettings = field(default_factory=PostgresSettings)
     skills: SkillsSettings = field(default_factory=SkillsSettings)
     memory: MemorySettings = field(default_factory=MemorySettings)
+    title: TitleSettings = field(default_factory=TitleSettings)
     knowledge: KnowledgeSettings = field(default_factory=KnowledgeSettings)
     langsmith: LangsmithSettings = field(default_factory=LangsmithSettings)
