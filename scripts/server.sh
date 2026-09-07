@@ -17,6 +17,19 @@ is_running() {
     [[ "${pid}" =~ ^[0-9]+$ ]] && kill -0 "${pid}" 2>/dev/null
 }
 
+# Wait until the server accepts TCP connections. / 等待服务器接受 TCP 连接。
+wait_for_server() {
+    local port=$1 host=$2 timeout=$3 waited=0
+    while [[ "${waited}" -lt "${timeout}" ]]; do
+        if (exec 3<>"/dev/tcp/${host}/${port}") >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 1
+        waited=$((waited + 1))
+    done
+    return 1
+}
+
 # Dump YAML-backed settings as KEY=VALUE lines, applying environment overrides
 # through the Python config module. / 以 KEY=VALUE 行形式导出 YAML 配置，环境变量覆盖由 Python 配置模块应用。
 config_values() {
@@ -184,7 +197,8 @@ start_server() {
     mkdir -p "${RUNTIME_DIR}"
     (
         cd "${REPO_ROOT}"
-        nohup setsid uv run langgraph dev --no-browser \
+        # Disable background reload because frontend build output shares this repository. / 禁用后台重载，因为前端构建输出与后端共用此仓库。
+        nohup setsid uv run langgraph dev --no-browser --no-reload \
             --host "${SERVER_HOST}" --port "${SERVER_PORT}" \
             >>"${LOG_FILE}" 2>&1 </dev/null &
         printf '%s\n' "$!" >"${PID_FILE}"
@@ -192,8 +206,7 @@ start_server() {
 
     local pid
     pid="$(<"${PID_FILE}")"
-    sleep 1
-    if ! kill -0 "${pid}" 2>/dev/null; then
+    if ! wait_for_server "${SERVER_PORT}" "${SERVER_HOST}" 90; then
         rm -f "${PID_FILE}"
         printf 'ZHarness failed to start; inspect %s.\n' "${LOG_FILE}" >&2
         return 1
@@ -274,6 +287,9 @@ case "${1:-}" in
         stop_server
         stop_postgres
         start_server
+        ;;
+    config)
+        config_values
         ;;
     status)
         show_status

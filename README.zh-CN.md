@@ -94,6 +94,7 @@ ZHarness 服务进程的宿主权限。
 - Python 3.13 或更高版本
 - [uv](https://docs.astral.sh/uv/)
 - Node.js 20 或更高版本及 pnpm
+- Nginx，用于提供统一的本地开发入口
 - Docker Engine（使用默认 Docker 沙箱时需要）
 - 所选模型提供商（MiMo、DeepSeek、OpenAI 或 Anthropic）对应的 API Key
 
@@ -153,7 +154,8 @@ postgres:
 托管 `postgres.password` 请保留在 `zharness/.env`（`ZHARNESS_POSTGRES_PASSWORD`），
 而不是写入 YAML 文件。使用外部 PostgreSQL 时设置 `postgres.managed: false`，此时必须
 提供显式 `ZHARNESS_POSTGRES_URI`；该 URI 会覆盖全部托管连接设置。`make stop` 会
-停止 Compose 容器，但保留数据库命名卷。也可以使用 `make postgres-start`、
+停止前端、后端和 Compose 容器，但保留数据库命名卷。使用 `make backend-stop`
+可仅停止后端和托管 PostgreSQL。也可以使用 `make postgres-start`、
 `make postgres-stop` 和 `make postgres-logs` 单独管理数据库。
 
 后续运行传入相同的 LangGraph `thread_id` 即可恢复持久化的会话状态。通过 LangGraph
@@ -252,27 +254,45 @@ sandbox:
 
 ### 4. 启动开发服务与前端
 
-```bash
-make start
-```
-
-默认服务地址为 `http://127.0.0.1:2024`。可在 LangGraph Studio 中交互，也可以通过
-LangGraph SDK 创建 thread 并运行 `lead_agent`。使用 `make logs` 持续查看后台日志，
-`make status` 检查运行状态，使用 `make stop` 停止服务。监听地址与端口通过
-`zharness/config.yaml` 中的 `server.host` 和 `server.port` 配置。选择 Docker
-沙箱（默认配置）时，`make start` 还会在启动服务前确认 Docker 已安装、正在运行且当前
-用户可以访问。如果 Docker 被暂停或无响应，检查会在五秒后超时退出。如需在前台运行，
-使用 `make dev`，然后按 `Ctrl+C` 停止；该命令执行相同的启动检查。
-
-首次使用时安装前端依赖，并在另一个终端启动前端：
+首次使用时安装前端依赖：
 
 ```bash
 pnpm --dir frontend install --frozen-lockfile
-make frontend-dev
 ```
 
-访问 `http://localhost:3000`。前端默认连接 `http://localhost:2024` 上的
-`lead_agent`，可通过 `frontend/.env.local` 覆盖。
+使用一个命令同时启动后端和前端：
+
+```bash
+make dev
+```
+
+`make up` 是同一命令的别名。`make dev` 会先预检服务端口，回收被其他 ZHarness
+检出占用的端口，然后一并启动托管 PostgreSQL、后端、前端与 Nginx。所有服务都由
+这一条命令统一管理，日志写入 `.zharness/logs/`（后端同时写入
+`.zharness/server.log`）。命令会占用当前终端并等待；按 `Ctrl+C` 即可停止全部
+服务，也可在另一个终端运行 `make stop`。
+
+如需仅在前台启动后端，使用：
+
+```bash
+make backend-dev
+```
+
+`make backend-start` 可仅在后台启动后端，原有的 `make start` 继续作为
+`make backend-start` 的兼容别名。使用 `make logs` 持续查看后台后端日志，
+`make status` 检查运行状态，使用 `make backend-stop` 可仅停止后端和托管
+PostgreSQL。`make stop` 会停止包括前端和托管 PostgreSQL 在内的完整开发环境。
+
+默认后端地址为 `http://127.0.0.1:2024`。Nginx 在 `http://localhost:2026`
+提供完整开发应用，将页面与热更新流量代理至 `http://127.0.0.1:3000`，并将
+`/api/langgraph/*` 代理至后端。前端连接地址可通过 `frontend/.env.local` 覆盖。后端监听地址与端口通过
+`zharness/config.yaml` 中的 `server.host` 和 `server.port` 配置。选择 Docker
+沙箱（默认配置）时，后端启动前会确认 Docker 已安装、正在运行且当前用户可以访问。
+如果 Docker 被暂停或无响应，检查会在五秒后超时退出。
+
+如果 Windows 到 WSL 的 localhost 转发不可用，请使用 `make dev` 输出的网络网关地址，
+例如 `http://10.255.255.254:2026`。前端会根据浏览器当前访问来源解析
+`/api/langgraph`，因此本地网关与网络网关可以共用同一份配置。
 
 ### 5. 运行冒烟验证
 

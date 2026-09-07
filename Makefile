@@ -2,31 +2,44 @@ SHELL := /bin/bash
 
 .DEFAULT_GOAL := help
 
-.PHONY: help dev start stop restart status logs frontend-dev frontend-build postgres-start postgres-stop postgres-logs clean clean-dry-run
+.PHONY: help dev up backend-dev backend-start backend-stop start stop restart status logs frontend-dev frontend-stop frontend-build postgres-start postgres-stop postgres-logs clean clean-dry-run
 
 help: ## Show available commands. / 显示可用命令。
 	@awk 'BEGIN {FS = ":.*## "; printf "Usage / 用法: make <target>\n\n"} /^[a-zA-Z0-9_-]+:.*## / {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-dev: ## Start the development server in the foreground. / 在前台启动开发服务。
+dev: ## Start the backend and frontend together. / 同时启动后端和前端。
+	@./scripts/dev.sh
+
+up: dev ## Alias for dev. / dev 的别名。
+
+backend-dev: ## Start only the backend in the foreground. / 仅在前台启动后端。
 	@./scripts/server.sh dev
 
-start: ## Start the development server in the background. / 在后台启动开发服务。
+backend-start: ## Start only the backend in the background. / 仅在后台启动后端。
 	@./scripts/server.sh start
 
-stop: ## Stop the background development server. / 停止后台开发服务。
+start: backend-start ## Backward-compatible backend-start alias. / 兼容旧用法的 backend-start 别名。
+
+stop: ## Stop the frontend, backend, and PostgreSQL. / 停止前端、后端和 PostgreSQL。
+	@./scripts/dev.sh stop
+
+backend-stop: ## Stop only the backend and managed PostgreSQL. / 仅停止后端和托管 PostgreSQL。
 	@./scripts/server.sh stop
 
-restart: ## Restart the development server. / 重启开发服务。
+restart: ## Restart only the background backend. / 仅重启后台后端。
 	@./scripts/server.sh restart
 
-status: ## Show the development server status. / 显示开发服务状态。
+status: ## Show the backend status. / 显示后端状态。
 	@./scripts/server.sh status
 
-logs: ## Follow development server logs. / 持续查看开发服务日志。
+logs: ## Follow backend logs. / 持续查看后端日志。
 	@./scripts/server.sh logs
 
 frontend-dev: ## Start the frontend development server. / 启动前端开发服务器。
 	@pnpm --dir frontend dev
+
+frontend-stop: ## Stop the frontend, Nginx gateway, backend, and PostgreSQL. / 停止前端、Nginx 网关、后端和 PostgreSQL。
+	@./scripts/dev.sh stop
 
 frontend-build: ## Build the frontend for production. / 构建生产版前端。
 	@pnpm --dir frontend build

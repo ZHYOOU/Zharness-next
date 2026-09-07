@@ -111,6 +111,7 @@ host bash gives the agent the permissions of the ZHarness server process.
 - Python 3.13 or later
 - [uv](https://docs.astral.sh/uv/)
 - Node.js 20 or later and pnpm
+- Nginx for the unified local development endpoint
 - Docker Engine when using the default Docker sandbox
 - An API key for your chosen model provider (MiMo, DeepSeek, OpenAI, or Anthropic)
 
@@ -180,9 +181,10 @@ Keep the managed `postgres.password` in `zharness/.env`
 `postgres.managed: false` when using an externally managed database; an
 explicit `ZHARNESS_POSTGRES_URI` is required then and overrides all managed
 connection settings.
-`make stop` stops the Compose container but retains its named volume. The
-database can also be managed independently with `make postgres-start`,
-`make postgres-stop`, and `make postgres-logs`.
+`make stop` stops the frontend, backend, and Compose container but retains the
+database's named volume. Use `make backend-stop` to stop only the backend and
+managed PostgreSQL. The database can also be managed independently with
+`make postgres-start`, `make postgres-stop`, and `make postgres-logs`.
 
 Use the same LangGraph `thread_id` on subsequent runs to resume its persisted
 conversation state. Deleting a thread through the LangGraph API also deletes
@@ -284,30 +286,51 @@ sandbox:
 
 ### 4. Start the development server and frontend
 
-```bash
-make start
-```
-
-The default server address is `http://127.0.0.1:2024`. You can interact with it
-through LangGraph Studio or use the LangGraph SDK to create threads and run
-`lead_agent`. Use `make logs` to follow the background server logs, `make status`
-to inspect its state, and `make stop` to stop it. The bind address and port are
-configured with `server.host` and `server.port` in `zharness/config.yaml`.
-When the Docker sandbox provider is selected (the default), `make start` also
-verifies that Docker is installed, running, and accessible before starting the
-server. The check times out after five seconds if Docker is paused or
-unresponsive. Use `make dev` instead to run the server in the foreground and
-stop it with `Ctrl+C`; it performs the same startup checks.
-
-Install the frontend dependencies once and start it in another terminal:
+Install the frontend dependencies once:
 
 ```bash
 pnpm --dir frontend install --frozen-lockfile
-make frontend-dev
 ```
 
-Open `http://localhost:3000`. The frontend connects to `lead_agent` at
-`http://localhost:2024` by default; override it in `frontend/.env.local`.
+Start the backend and frontend together with one command:
+
+```bash
+make dev
+```
+
+`make up` is an alias for the same command. `make dev` pre-flights the service
+ports and reclaims any held by another ZHarness checkout, then starts the
+managed PostgreSQL, backend, frontend, and Nginx together. All services are
+managed by this single command and log to `.zharness/logs/` (the backend also
+writes `.zharness/server.log`). The command occupies the terminal and waits;
+press `Ctrl+C` to stop everything, or run `make stop` from another terminal.
+
+To start only the backend in the foreground, use:
+
+```bash
+make backend-dev
+```
+
+Use `make backend-start` to run only the backend in the background. The legacy
+`make start` command remains an alias for `make backend-start`. Use `make logs`
+to follow background backend logs, `make status` to inspect its state, and
+`make backend-stop` to stop only it and managed PostgreSQL. `make stop` stops
+the complete development stack, including the frontend and managed PostgreSQL.
+
+The default backend address is `http://127.0.0.1:2024`. Nginx exposes the
+complete development application at `http://localhost:2026`, proxies pages and
+hot-reload traffic to the frontend at `http://127.0.0.1:3000`, and proxies
+`/api/langgraph/*` to the backend. The frontend connection can be overridden in
+`frontend/.env.local`. The backend bind address and port are configured with
+`server.host` and `server.port` in `zharness/config.yaml`. When the Docker
+sandbox provider is selected (the default), backend startup verifies that
+Docker is installed, running, and accessible. The check times out after five
+seconds if Docker is paused or unresponsive.
+
+If Windows-to-WSL localhost forwarding is unavailable, use one of the network
+gateway addresses printed by `make dev`, such as `http://10.255.255.254:2026`.
+The frontend resolves `/api/langgraph` against the browser's current origin, so
+the same configuration works through either the local or network gateway.
 
 ### 5. Run the smoke test
 
