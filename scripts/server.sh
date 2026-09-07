@@ -239,6 +239,9 @@ stop_server() {
 
 show_status() {
     if is_running; then
+        load_config
+        SERVER_HOST="${ZHARNESS_SERVER_HOST:-127.0.0.1}"
+        SERVER_PORT="${ZHARNESS_SERVER_PORT:-2024}"
         printf 'ZHarness is running (PID %s) at http://%s:%s.\n' \
             "$(<"${PID_FILE}")" "${SERVER_HOST}" "${SERVER_PORT}"
     else

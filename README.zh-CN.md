@@ -12,6 +12,7 @@ ZHarness Next 是一个面向 AI 编程场景的 Agent 运行底座。它基于 
 ## 核心能力
 
 - 基于 LangGraph 和 LangChain 构建 Lead Agent。
+- 基于 LangChain Agent Chat UI 的 Next.js 对话前端。
 - 通过 MiMo、DeepSeek、OpenAI 或 Anthropic Chat Model 进行推理和工具调用。
 - 按 LangGraph `thread_id` 隔离工作区与执行容器。
 - 提供目录浏览、文件读写、精确编辑、删除、Glob 和文本搜索工具。
@@ -41,6 +42,7 @@ ZHarness Next 是一个面向 AI 编程场景的 Agent 运行底座。它基于 
 ├── docker/
 │   └── sandbox.Dockerfile    # Agent 命令执行环境
 ├── gateway/                  # 预留的外部网关包
+├── frontend/                 # 基于 Agent Chat UI 的 Next.js 前端
 ├── scripts/
 │   ├── cleanup.py            # 清理会话、工作区与沙箱
 │   ├── server.sh             # 服务与 PostgreSQL 生命周期辅助脚本
@@ -91,6 +93,7 @@ ZHarness 服务进程的宿主权限。
 
 - Python 3.13 或更高版本
 - [uv](https://docs.astral.sh/uv/)
+- Node.js 20 或更高版本及 pnpm
 - Docker Engine（使用默认 Docker 沙箱时需要）
 - 所选模型提供商（MiMo、DeepSeek、OpenAI 或 Anthropic）对应的 API Key
 
@@ -247,7 +250,7 @@ sandbox:
     # 可选且需要高度信任：allow_host_bash: true
 ```
 
-### 4. 启动开发服务
+### 4. 启动开发服务与前端
 
 ```bash
 make start
@@ -260,6 +263,16 @@ LangGraph SDK 创建 thread 并运行 `lead_agent`。使用 `make logs` 持续�
 沙箱（默认配置）时，`make start` 还会在启动服务前确认 Docker 已安装、正在运行且当前
 用户可以访问。如果 Docker 被暂停或无响应，检查会在五秒后超时退出。如需在前台运行，
 使用 `make dev`，然后按 `Ctrl+C` 停止；该命令执行相同的启动检查。
+
+首次使用时安装前端依赖，并在另一个终端启动前端：
+
+```bash
+pnpm --dir frontend install --frozen-lockfile
+make frontend-dev
+```
+
+访问 `http://localhost:3000`。前端默认连接 `http://localhost:2024` 上的
+`lead_agent`，可通过 `frontend/.env.local` 覆盖。
 
 ### 5. 运行冒烟验证
 

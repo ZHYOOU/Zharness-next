@@ -2,7 +2,7 @@ SHELL := /bin/bash
 
 .DEFAULT_GOAL := help
 
-.PHONY: help dev start stop restart status logs postgres-start postgres-stop postgres-logs clean clean-dry-run
+.PHONY: help dev start stop restart status logs frontend-dev frontend-build postgres-start postgres-stop postgres-logs clean clean-dry-run
 
 help: ## Show available commands. / 显示可用命令。
 	@awk 'BEGIN {FS = ":.*## "; printf "Usage / 用法: make <target>\n\n"} /^[a-zA-Z0-9_-]+:.*## / {printf "  %-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -24,6 +24,12 @@ status: ## Show the development server status. / 显示开发服务状态。
 
 logs: ## Follow development server logs. / 持续查看开发服务日志。
 	@./scripts/server.sh logs
+
+frontend-dev: ## Start the frontend development server. / 启动前端开发服务器。
+	@pnpm --dir frontend dev
+
+frontend-build: ## Build the frontend for production. / 构建生产版前端。
+	@pnpm --dir frontend build
 
 postgres-start: ## Start the managed PostgreSQL service. / 启动托管的 PostgreSQL 服务。
 	@./scripts/server.sh postgres-start

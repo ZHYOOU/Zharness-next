@@ -14,6 +14,7 @@ future gateway layer.
 ## Features
 
 - A Lead Agent built with LangGraph and LangChain.
+- A Next.js chat frontend based on LangChain Agent Chat UI.
 - Reasoning and tool calling through MiMo, DeepSeek, OpenAI, or Anthropic chat models.
 - Thread-scoped workspaces with a shared virtual path model across sandbox
   providers.
@@ -53,6 +54,7 @@ future gateway layer.
 ├── docker/
 │   └── sandbox.Dockerfile    # Agent command-execution environment
 ├── gateway/                  # Placeholder for a future external gateway
+├── frontend/                 # Next.js frontend based on Agent Chat UI
 ├── scripts/
 │   ├── cleanup.py            # Remove sessions, workspaces, and sandboxes
 │   ├── server.sh             # Server and PostgreSQL lifecycle helpers
@@ -108,6 +110,7 @@ host bash gives the agent the permissions of the ZHarness server process.
 
 - Python 3.13 or later
 - [uv](https://docs.astral.sh/uv/)
+- Node.js 20 or later and pnpm
 - Docker Engine when using the default Docker sandbox
 - An API key for your chosen model provider (MiMo, DeepSeek, OpenAI, or Anthropic)
 
@@ -279,7 +282,7 @@ sandbox:
     # Optional and high trust: allow_host_bash: true
 ```
 
-### 4. Start the development server
+### 4. Start the development server and frontend
 
 ```bash
 make start
@@ -295,6 +298,16 @@ verifies that Docker is installed, running, and accessible before starting the
 server. The check times out after five seconds if Docker is paused or
 unresponsive. Use `make dev` instead to run the server in the foreground and
 stop it with `Ctrl+C`; it performs the same startup checks.
+
+Install the frontend dependencies once and start it in another terminal:
+
+```bash
+pnpm --dir frontend install --frozen-lockfile
+make frontend-dev
+```
+
+Open `http://localhost:3000`. The frontend connects to `lead_agent` at
+`http://localhost:2024` by default; override it in `frontend/.env.local`.
 
 ### 5. Run the smoke test
 
