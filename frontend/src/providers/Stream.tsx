@@ -23,7 +23,11 @@ import { Switch } from "@/components/ui/switch";
 import { ArrowRight } from "lucide-react";
 import { PasswordInput } from "@/components/ui/password-input";
 import { getApiKey } from "@/lib/api-key";
-import { DEFAULT_API_URL, DEFAULT_ASSISTANT_ID } from "@/lib/config";
+import {
+  DEFAULT_API_URL,
+  DEFAULT_ASSISTANT_ID,
+  resolveApiUrl,
+} from "@/lib/config";
 import { useThreads } from "./Thread";
 import { toast } from "sonner";
 
@@ -175,7 +179,7 @@ export const StreamProvider: React.FC<{ children: ReactNode }> = ({
   };
 
   // Resolve final values with URL parameters taking precedence. / 解析最终值，并让 URL 参数优先。
-  const finalApiUrl = apiUrl || envApiUrl || DEFAULT_API_URL;
+  const finalApiUrl = resolveApiUrl(apiUrl || envApiUrl || DEFAULT_API_URL);
   const finalAssistantId =
     assistantId || envAssistantId || DEFAULT_ASSISTANT_ID;
   const finalAuthScheme = authScheme || envAuthScheme || "";

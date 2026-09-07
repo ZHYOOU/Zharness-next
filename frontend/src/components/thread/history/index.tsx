@@ -13,13 +13,16 @@ import {
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  ChevronsUpDown,
   LoaderCircle,
   PanelRightOpen,
   PanelRightClose,
+  Settings,
   Trash2,
 } from "lucide-react";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { toast } from "sonner";
+import { SettingsDialog } from "@/components/settings-dialog";
 
 function ThreadList({
   threads,
@@ -130,6 +133,7 @@ function ThreadHistoryLoading() {
 
 export default function ThreadHistory() {
   const isLargeScreen = useMediaQuery("(min-width: 1024px)");
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [chatHistoryOpen, setChatHistoryOpen] = useQueryState(
     "chatHistoryOpen",
     parseAsBoolean.withDefault(false),
@@ -149,7 +153,7 @@ export default function ThreadHistory() {
 
   return (
     <>
-      <div className="shadow-inner-right hidden h-screen w-[300px] shrink-0 flex-col items-start justify-start gap-6 border-r-[1px] border-slate-300 lg:flex">
+      <div className="shadow-inner-right hidden h-screen w-[300px] shrink-0 flex-col border-r-[1px] border-slate-300 lg:flex">
         <div className="flex w-full items-center justify-between px-4 pt-1.5">
           <Button
             className="hover:bg-gray-100"
@@ -166,11 +170,24 @@ export default function ThreadHistory() {
             Thread History
           </h1>
         </div>
-        {threadsLoading ? (
-          <ThreadHistoryLoading />
-        ) : (
-          <ThreadList threads={threads} />
-        )}
+        <div className="min-h-0 flex-1 px-2 pt-6">
+          {threadsLoading ? (
+            <ThreadHistoryLoading />
+          ) : (
+            <ThreadList threads={threads} />
+          )}
+        </div>
+        <div className="w-full border-t p-2">
+          <Button
+            variant="ghost"
+            className="text-muted-foreground w-full justify-start px-3 font-normal"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <Settings className="size-4" />
+            <span className="flex-1 text-left">设置与更多</span>
+            <ChevronsUpDown className="size-4" />
+          </Button>
+        </div>
       </div>
       <div className="lg:hidden">
         <Sheet
@@ -191,9 +208,20 @@ export default function ThreadHistory() {
               threads={threads}
               onThreadClick={() => setChatHistoryOpen((o) => !o)}
             />
+            <Button
+              variant="ghost"
+              className="mt-auto w-full justify-start"
+              onClick={() => setSettingsOpen(true)}
+            >
+              <Settings /> 设置与更多
+            </Button>
           </SheetContent>
         </Sheet>
       </div>
+      <SettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+      />
     </>
   );
 }

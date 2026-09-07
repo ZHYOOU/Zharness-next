@@ -12,7 +12,11 @@ import {
   SetStateAction,
 } from "react";
 import { createClient } from "./client";
-import { DEFAULT_API_URL, DEFAULT_ASSISTANT_ID } from "@/lib/config";
+import {
+  DEFAULT_API_URL,
+  DEFAULT_ASSISTANT_ID,
+  resolveApiUrl,
+} from "@/lib/config";
 
 interface ThreadContextType {
   getThreads: () => Promise<Thread[]>;
@@ -51,7 +55,9 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [threadsLoading, setThreadsLoading] = useState(false);
 
-  const resolvedApiUrl = apiUrl || envApiUrl || DEFAULT_API_URL;
+  const resolvedApiUrl = resolveApiUrl(
+    apiUrl || envApiUrl || DEFAULT_API_URL,
+  );
   const resolvedAssistantId =
     assistantId || envAssistantId || DEFAULT_ASSISTANT_ID;
   const resolvedAuthScheme = authScheme || envAuthScheme || undefined;
