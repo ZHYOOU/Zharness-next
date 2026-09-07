@@ -53,3 +53,10 @@ If a gateway is implemented later, this package should own client-facing
 protocol and platform concerns such as authentication, quotas, request
 validation, and wrapping the LangGraph API. Agent execution, workspaces, and
 Docker sandbox logic should remain in `zharness` to keep the layers decoupled.
+
+## Development Priority
+
+Per the project guidelines, `zharness` is the current development priority.
+Work on `gateway` is deferred until the `zharness` Agent runtime is sufficiently
+complete and stable. Do not design for multi-instance deployment or
+authentication ahead of an explicit scope change.

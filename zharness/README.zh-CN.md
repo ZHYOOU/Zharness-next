@@ -61,6 +61,7 @@ src/zharness/
 | `glob_files` | 使用 Glob 模式查找路径 |
 | `grep_files` | 在工作区文本文件中搜索字面字符串 |
 | `execute_command` | 从虚拟工作区 `cwd` 执行 Shell 命令 |
+| `web_search` | 查询 DuckDuckGo 并返回标题、URL 和摘要 |
 | `describe_skill` | 获取已安装技能的元数据（存在技能时才注册） |
 | `knowledge_search` | 搜索当前 thread 已索引的参考资料 |
 | `knowledge_ingest` | 索引当前 thread 的 `/workspace` UTF-8 文件 |
@@ -182,7 +183,9 @@ model:
 - 在需要文件路径时直接操作 `/workspace`；
 - 通过仅支持 UTF-8 的 Agent 工具读取二进制文件。
 
-文件读写、编辑、删除、Glob 和 Grep 都委托给线程级沙箱后端完成。
+文件读写、编辑、删除、Glob 和 Grep 都委托给线程级沙箱后端完成。Glob 和 Grep
+默认最多返回 100 条结果。写入使用临时文件后再执行 `os.replace`，避免留下
+写入一半的目标文件。
 
 ## 技能
 
@@ -246,6 +249,8 @@ wget 和 C 编译工具链。容器可联网，可在运行时安装依赖，但
 | `sandbox.provider` | `docker` | 沙箱后端：`docker` 或 `local` |
 | `sandbox.docker.image` | `zharness-sandbox:latest` | Docker 镜像名称 |
 | `sandbox.docker.memory_limit` | `512m` | 容器内存限制 |
+| `sandbox.docker.nano_cpus` | `1000000000` | CPU 配额（纳核） |
+| `sandbox.docker.pids_limit` | `128` | 每容器进程数上限 |
 | `sandbox.docker.network_enabled` | `true` | Docker 沙箱网络访问 |
 | `sandbox.docker.user` | 服务进程 UID/GID | 容器运行用户，例如 `1000:1000` |
 | `sandbox.docker.idle_ttl_seconds` | `86400` | 容器空闲回收秒数；`0` 表示禁用 TTL 清理 |
@@ -293,4 +298,5 @@ ZHARNESS_RUN_DOCKER_TESTS=1 uv run pytest zharness/tests/test_docker_integration
 ```
 
 测试覆盖 Agent 工具注册、中间件（含人工审批）、工作区路径隔离、文件系统、Docker 与
-本地沙箱、命令执行、技能解析与发现、PostgreSQL 检查点以及 HTTP 生命周期清理。
+本地沙箱、命令执行、技能解析与发现、长期记忆、RAG 知识库、PostgreSQL 检查点以及
+HTTP 生命周期清理。

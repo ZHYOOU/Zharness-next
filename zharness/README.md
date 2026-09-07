@@ -62,6 +62,7 @@ src/zharness/
 | `glob_files` | Find paths with a glob pattern |
 | `grep_files` | Search workspace text files for a literal string |
 | `execute_command` | Run a shell command from a virtual workspace `cwd` |
+| `web_search` | Query DuckDuckGo and return titles, URLs, and snippets |
 | `describe_skill` | Fetch metadata for installed skills (registered when skills exist) |
 | `knowledge_search` | Search indexed reference material for the current thread |
 | `knowledge_ingest` | Index current-thread `/workspace` UTF-8 files |
@@ -138,7 +139,7 @@ stored vectors. Supported LangChain `search_type` values are `similarity`,
 `similarity_score_threshold`, and `mmr`. Hybrid search is an option on
 `similarity`; disable it before selecting either of the other strategies.
 Fusion can use `reciprocal_rank_fusion` or `weighted_sum_ranking`. See the
-[RAG design](docs/rag-knowledge-base-design.zh-CN.md) for the complete contract.
+[RAG design](docs/rag-knowledge-base-design.md) for the complete contract.
 
 ## Model Configuration
 
@@ -279,6 +280,8 @@ Sandbox configuration keys:
 | `sandbox.provider` | `docker` | Sandbox backend: `docker` or `local` |
 | `sandbox.docker.image` | `zharness-sandbox:latest` | Docker image name |
 | `sandbox.docker.memory_limit` | `512m` | Container memory limit |
+| `sandbox.docker.nano_cpus` | `1000000000` | CPU quota in nanocores |
+| `sandbox.docker.pids_limit` | `128` | Process limit per container |
 | `sandbox.docker.network_enabled` | `true` | Docker sandbox network access |
 | `sandbox.docker.user` | Server process UID/GID | Container user, for example `1000:1000` |
 | `sandbox.docker.idle_ttl_seconds` | `86400` | Remove containers idle for this many seconds; `0` disables TTL cleanup |
@@ -337,4 +340,5 @@ ZHARNESS_RUN_DOCKER_TESTS=1 uv run pytest zharness/tests/test_docker_integration
 The test suite covers agent tool registration, middleware (including
 human-in-the-loop approval), workspace path isolation, filesystem operations,
 Docker and local sandbox behavior, command execution, skill parsing and
-discovery, PostgreSQL checkpoints, and HTTP lifecycle cleanup.
+discovery, long-term memory, the RAG knowledge base, PostgreSQL checkpoints, and
+HTTP lifecycle cleanup.

@@ -15,6 +15,7 @@ ZHarness Next 是一个面向 AI 编程场景的 Agent 运行底座。它基于 
 - 通过 MiMo、DeepSeek、OpenAI 或 Anthropic Chat Model 进行推理和工具调用。
 - 按 LangGraph `thread_id` 隔离工作区与执行容器。
 - 提供目录浏览、文件读写、精确编辑、删除、Glob 和文本搜索工具。
+- 使用 DuckDuckGo 网页搜索，返回标题、URL 和摘要，无需 API Key。
 - 可插拔的沙箱提供商：默认使用加固的 Docker 容器，也可通过
   `zharness/config.yaml` 中的 `sandbox.provider: local` 切换为本地文件系统沙箱（仅限可信本地项目）。
 - 每次运行可选择 Shell 审批策略：默认的 `allow_all` 直接执行；
@@ -180,6 +181,7 @@ model:
 | `server.host` | `127.0.0.1` | 服务绑定地址 |
 | `server.port` | `2024` | 服务绑定端口 |
 | `home` | `<cwd>/.zharness` | 服务器拥有的数据目录 |
+| `timezone` | `Asia/Shanghai` | 动态当前日期上下文使用的 IANA 时区 |
 | `sandbox.provider` | `docker` | 沙箱后端：`docker` 或 `local` |
 | `sandbox.docker.image` | `zharness-sandbox:latest` | 沙箱镜像名称 |
 | `sandbox.docker.memory_limit` | `512m` | 单个容器内存限制 |
@@ -193,10 +195,41 @@ model:
 | `sandbox.local.root` | 各 thread 自己的工作区 | 本地提供商下所有 thread 共享的宿主目录 |
 | `sandbox.local.allow_host_bash` | `false` | 允许本地提供商执行宿主 Shell 命令 |
 | `skills.path` | `<home>/skills`，然后仓库 `skills/` | 覆盖存放 `SKILL.md` 技能包的目录 |
+| `memory.enabled` | `true` | 抽取、注入与记忆工具的总开关 |
+| `memory.user_id` | `default` | 存储与召回记忆的单用户身份标识 |
+| `memory.max_facts` | `200` | 保留事实的容量上限；超出时驱逐评分最低的事实 |
+| `memory.min_confidence` | `0.7` | 抽取事实置信度低于该阈值时不入库 |
+| `memory.inject_top_k` | `8` | 作为隐藏上下文注入的顶级事实数量 |
+| `memory.search_limit` | `10` | `memory_search` 的默认结果条数 |
+| `memory.gate_enabled` | `true` | 是否强制执行确定性写入闸门 |
+| `memory.extraction_enabled` | `true` | 每轮结束后是否自动抽取记忆 |
+| `memory.extraction_model` | 无 | 抽取专用模型名称；null 时复用主模型 |
+| `memory.injection_enabled` | `true` | 每次主模型调用是否注入记忆上下文 |
+| `memory.injection_max_chars` | `2000` | 注入记忆块的最大字符数 |
+| `knowledge.enabled` | `true` | RAG 知识库总开关 |
+| `knowledge.embedding.model` | `text-embedding-v4` | 嵌入模型名称 |
+| `knowledge.embedding.dimensions` | `1024` | 嵌入向量维度 |
+| `knowledge.embedding.batch_size` | `10` | 嵌入请求批大小 |
+| `knowledge.embedding.timeout_seconds` | `15` | 嵌入请求超时（秒） |
+| `knowledge.embedding.max_retries` | `2` | 嵌入请求重试次数 |
+| `knowledge.chunking.size_characters` | `2000` | 文档切分块大小（字符） |
+| `knowledge.chunking.overlap_characters` | `200` | 切分块重叠（字符） |
+| `knowledge.retrieval.search_type` | `similarity` | LangChain 检索类型：`similarity`、`similarity_score_threshold` 或 `mmr` |
+| `knowledge.retrieval.search_kwargs.k` | `6` | 检索返回的结果数 |
+| `knowledge.retrieval.search_kwargs.fetch_k` | `40` | MMR 候选池大小 |
+| `knowledge.retrieval.search_kwargs.lambda_mult` | `0.5` | MMR 在相关性与多样性之间的平衡 |
+| `knowledge.retrieval.search_kwargs.score_threshold` | 无 | `similarity_score_threshold` 的分数阈值 |
+| `knowledge.retrieval.hybrid.enabled` | `true` | 是否启用稠密/全文混合检索 |
+| `knowledge.retrieval.hybrid.fusion_function` | `reciprocal_rank_fusion` | 融合函数：`reciprocal_rank_fusion` 或 `weighted_sum_ranking` |
+| `knowledge.retrieval.max_context_chars` | `12000` | 传给模型的检索上下文最大字符数 |
+| `knowledge.limits.max_file_bytes` | `5242880` | 单文件导入上限（字节） |
+| `knowledge.limits.max_files_per_call` | `20` | 每次导入调用的文件数上限 |
+| `knowledge.limits.max_chunks_per_document` | `1000` | 单文档切分块数上限 |
 | `postgres.managed` | `true` | 使用 Compose 托管的 PostgreSQL 服务 |
 | `postgres.user` | `zharness` | 托管 PostgreSQL 用户 |
 | `postgres.database` | `zharness` | 托管 PostgreSQL 数据库 |
 | `postgres.port` | `5432` | 托管 PostgreSQL 宿主端口 |
+| `postgres.uri` | 无 | 显式 PostgreSQL 连接 URI；覆盖全部托管设置（请保留在 `.env` 中） |
 | `langsmith.tracing` | `false` | 是否启用 LangSmith tracing |
 | `langsmith.project` | 无 | LangSmith 项目名称 |
 
