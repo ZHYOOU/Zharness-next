@@ -19,6 +19,8 @@ src/zharness/
 ├── host/
 │   └── paths.py             # Data home and thread workspace resolution
 ├── knowledge/               # Thread-scoped RAG ingestion and retrieval
+├── memory/                  # Long-term memory: extraction, gate, scoring, tools
+├── middleware/              # Todo, title, subagent, and date middlewares
 ├── models/
 │   └── factory.py           # Chat model factory
 ├── sandbox/
@@ -31,7 +33,8 @@ src/zharness/
 ├── server/
 │   ├── checkpointer.py      # PostgreSQL-backed checkpoint lifecycle
 │   ├── graph.py             # LangGraph graph entry point
-│   └── http.py              # Sandbox cleanup middleware and server lifespan
+│   ├── http.py              # Sandbox cleanup middleware and server lifespan
+│   └── memory.py            # Memory management HTTP endpoints
 ├── skills/
 │   ├── catalog.py           # Immutable skill catalog with deferred search
 │   ├── constants.py         # Skills mount path and env-var constants
@@ -143,6 +146,24 @@ stored vectors. Supported LangChain `search_type` values are `similarity`,
 `similarity`; disable it before selecting either of the other strategies.
 Fusion can use `reciprocal_rank_fusion` or `weighted_sum_ranking`. See the
 [RAG design](docs/rag-knowledge-base-design.md) for the complete contract.
+
+## Long-Term Memory
+
+The optional `memory` subsystem stores durable facts about the user in the same
+PostgreSQL database as checkpointing. After each completed turn,
+`MemoryMiddleware` queues a detached background extraction, serialized per
+thread and coalesced so an idle server performs one model call per thread.
+Extraction is gated by a deterministic write gate, deduplicated, and
+capacity-capped with a hybrid eviction score, then surfaced as hidden context
+and through the `memory_search`/`memory_add`/`memory_update`/`memory_delete`
+tools. A thread-level watermark advances only after a successful write, so a
+failed extraction retries on the next turn.
+
+The server exposes management endpoints at `/memory/status` (config status),
+`/memory` (GET/POST), and `/memory/{fact_id}` (PUT/DELETE), which the frontend
+settings dialog uses to list, add, edit, and delete facts. Background tasks are
+process-local: shutdown drains the queue for up to five seconds, and a crash
+does not preserve the queue.
 
 ## Model Configuration
 

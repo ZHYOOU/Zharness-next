@@ -18,6 +18,8 @@ src/zharness/
 ├── host/
 │   └── paths.py             # 数据 home 与线程工作区路径解析
 ├── knowledge/               # 线程级 RAG 导入与检索
+├── memory/                  # 长期记忆：抽取、闸门、评分与工具
+├── middleware/              # Todo、标题、子 Agent 与日期中间件
 ├── models/
 │   └── factory.py           # Chat Model 工厂
 ├── sandbox/
@@ -30,7 +32,8 @@ src/zharness/
 ├── server/
 │   ├── checkpointer.py      # PostgreSQL 检查点生命周期
 │   ├── graph.py             # LangGraph 图入口
-│   └── http.py              # 沙箱清理中间件和服务生命周期
+│   ├── http.py              # 沙箱清理中间件和服务生命周期
+│   └── memory.py            # 记忆管理 HTTP 接口
 ├── skills/
 │   ├── catalog.py           # 不可变技能目录与延迟搜索
 │   ├── constants.py         # 技能挂载路径与环境变量常量
@@ -125,6 +128,19 @@ EMBEDDING_API_KEY=your-api-key
 `similarity` 的可选配置；切换到另外两种策略前须将其关闭。融合函数支持
 `reciprocal_rank_fusion` 和 `weighted_sum_ranking`。完整约束见
 [RAG 设计文档](docs/rag-knowledge-base-design.zh-CN.md)。
+
+## 长期记忆
+
+可选的 `memory` 子系统将用户持久化事实存储在与检查点相同的 PostgreSQL 数据库中。
+每轮结束后，`MemoryMiddleware` 会排队执行独立的后台抽取：按 thread 串行处理并合并
+排队的快照，因此空闲的服务每个 thread 只执行一次模型调用。抽取结果会经确定性写入
+闸门过滤、去重，并以混合驱逐评分限容，随后以隐藏上下文及
+`memory_search`/`memory_add`/`memory_update`/`memory_delete` 工具的形式呈现。线程级
+水位只在写入成功后推进，抽取失败会在下一轮重试。
+
+服务端提供管理接口：`/memory/status`（配置状态）、`/memory`（GET/POST）与
+`/memory/{fact_id}`（PUT/DELETE），前端设置对话框据此实现事实的新增、编辑、删除与
+展示。后台任务保存在当前进程内：关闭时最多等待五秒排空队列，进程崩溃不会保留队列。
 
 ## 模型配置
 

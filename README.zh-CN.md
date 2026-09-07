@@ -27,9 +27,12 @@ ZHarness Next 是一个面向 AI 编程场景的 Agent 运行底座。它基于 
 - 基于 PostgreSQL 的检查点持久化，包含幂等的建表初始化，本地开发使用托管的
   Compose 服务。
 - 使用 Todo 中间件规划多步骤任务，并在上下文过长时自动生成摘要。
-- 长期记忆存储在 PostgreSQL 中：每轮结束后自动抽取事实，经确定性写入闸门过滤、
-  内容去重、混合驱逐评分限容，并以隐藏上下文与 `memory_search`/`memory_add`/
-  `memory_update`/`memory_delete` 工具的形式呈现给 agent。
+- 自动生成线程标题：首轮完整交互后，Agent 将 `title` 写入线程状态，默认由首条
+  用户消息在本地派生，也可通过 `title.model_name` 使用专用模型生成。
+- 长期记忆存储在 PostgreSQL 中：每轮结束后在独立后台任务中自动抽取事实，经确定性
+  写入闸门过滤、内容去重、混合驱逐评分限容，并以隐藏上下文与
+  `memory_search`/`memory_add`/`memory_update`/`memory_delete` 工具及基于
+  `/memory*` HTTP 接口的 Web 管理界面的形式呈现给用户。
 - 线程级 RAG 知识库由 pgvector 和阿里 `text-embedding-v4` 支撑，支持可配置的
   LangChain 检索策略以及稠密向量/全文检索融合。
 - 支持按空闲时间和数量上限自动回收 Docker 沙箱，删除 thread 时完整清理资源，
@@ -45,8 +48,10 @@ ZHarness Next 是一个面向 AI 编程场景的 Agent 运行底座。它基于 
 ├── frontend/                 # 基于 Agent Chat UI 的 Next.js 前端
 ├── scripts/
 │   ├── cleanup.py            # 清理会话、工作区与沙箱
+│   ├── dev.sh                # `make dev` 统一启动/停止脚本
 │   ├── server.sh             # 服务与 PostgreSQL 生命周期辅助脚本
-│   └── smoke_server.py       # 服务端到端冒烟验证
+│   ├── smoke_server.py       # 服务端到端冒烟验证
+│   └── trace_url.py          # 解析配置的 LangSmith 项目 URL
 ├── skills/                   # 仓库内置的 SKILL.md 技能包（public）
 ├── zharness/                 # Agent、工具、工作区和沙箱实现
 │   └── config.yaml           # 非敏感 YAML 配置
@@ -174,72 +179,10 @@ model:
   openai_base_url: http://127.0.0.1:11434/v1
 ```
 
-`zharness/config.yaml` 中的可选配置：
-
-| 键 | 默认值 | 用途 |
-| --- | --- | --- |
-| `model.name` | `mimo-v2.5` | 聊天模型名称 |
-| `model.provider` | 根据模型名推断 | 模型提供商：`mimo`、`deepseek`、`openai` 或 `anthropic` |
-| `model.openai_base_url` | 无 | OpenAI 兼容端点的基础地址（Ollama、vLLM 等） |
-| `model.anthropic_base_url` | 无 | Anthropic 提供商的基础地址覆盖 |
-| `model.mimo_base_url` | `https://api.xiaomimimo.com/v1` | MiMo 提供商的基础地址覆盖 |
-| `server.host` | `127.0.0.1` | 服务绑定地址 |
-| `server.port` | `2024` | 服务绑定端口 |
-| `home` | `<cwd>/.zharness` | 服务器拥有的数据目录 |
-| `timezone` | `Asia/Shanghai` | 动态当前日期上下文使用的 IANA 时区 |
-| `sandbox.provider` | `docker` | 沙箱后端：`docker` 或 `local` |
-| `sandbox.docker.image` | `zharness-sandbox:latest` | 沙箱镜像名称 |
-| `sandbox.docker.memory_limit` | `512m` | 单个容器内存限制 |
-| `sandbox.docker.nano_cpus` | `1000000000` | CPU 配额（纳核） |
-| `sandbox.docker.pids_limit` | `128` | 每容器进程数上限 |
-| `sandbox.docker.user` | 服务进程 UID/GID | 容器运行用户，例如 `1000:1000` |
-| `sandbox.docker.network_enabled` | `true` | Docker 沙箱网络访问 |
-| `sandbox.docker.idle_ttl_seconds` | `86400` | 容器空闲回收秒数；`0` 表示禁用 TTL 清理 |
-| `sandbox.docker.max_containers` | `5` | 最多保留的沙箱容器数；`0` 表示禁用数量限制 |
-| `sandbox.docker.cleanup_interval_seconds` | `300` | 后台沙箱清理周期（秒） |
-| `sandbox.local.root` | 各 thread 自己的工作区 | 本地提供商下所有 thread 共享的宿主目录 |
-| `sandbox.local.allow_host_bash` | `false` | 允许本地提供商执行宿主 Shell 命令 |
-| `skills.path` | `<home>/skills`，然后仓库 `skills/` | 覆盖存放 `SKILL.md` 技能包的目录 |
-| `memory.enabled` | `true` | 抽取、注入与记忆工具的总开关 |
-| `memory.user_id` | `default` | 存储与召回记忆的单用户身份标识 |
-| `memory.max_facts` | `200` | 保留事实的容量上限；超出时驱逐评分最低的事实 |
-| `memory.min_confidence` | `0.7` | 抽取事实置信度低于该阈值时不入库 |
-| `memory.inject_top_k` | `8` | 作为隐藏上下文注入的顶级事实数量 |
-| `memory.search_limit` | `10` | `memory_search` 的默认结果条数 |
-| `memory.gate_enabled` | `true` | 是否强制执行确定性写入闸门 |
-| `memory.extraction_enabled` | `true` | 每轮结束后是否自动抽取记忆 |
-| `memory.extraction_model` | 无 | 抽取专用模型名称；null 时复用主模型 |
-| `memory.injection_enabled` | `true` | 每次主模型调用是否注入记忆上下文 |
-| `memory.injection_max_chars` | `2000` | 注入记忆块的最大字符数 |
-| `knowledge.enabled` | `true` | RAG 知识库总开关 |
-| `knowledge.embedding.model` | `text-embedding-v4` | 嵌入模型名称 |
-| `knowledge.embedding.dimensions` | `1024` | 嵌入向量维度 |
-| `knowledge.embedding.batch_size` | `10` | 嵌入请求批大小 |
-| `knowledge.embedding.timeout_seconds` | `15` | 嵌入请求超时（秒） |
-| `knowledge.embedding.max_retries` | `2` | 嵌入请求重试次数 |
-| `knowledge.chunking.size_characters` | `2000` | 文档切分块大小（字符） |
-| `knowledge.chunking.overlap_characters` | `200` | 切分块重叠（字符） |
-| `knowledge.retrieval.search_type` | `similarity` | LangChain 检索类型：`similarity`、`similarity_score_threshold` 或 `mmr` |
-| `knowledge.retrieval.search_kwargs.k` | `6` | 检索返回的结果数 |
-| `knowledge.retrieval.search_kwargs.fetch_k` | `40` | MMR 候选池大小 |
-| `knowledge.retrieval.search_kwargs.lambda_mult` | `0.5` | MMR 在相关性与多样性之间的平衡 |
-| `knowledge.retrieval.search_kwargs.score_threshold` | 无 | `similarity_score_threshold` 的分数阈值 |
-| `knowledge.retrieval.hybrid.enabled` | `true` | 是否启用稠密/全文混合检索 |
-| `knowledge.retrieval.hybrid.fusion_function` | `reciprocal_rank_fusion` | 融合函数：`reciprocal_rank_fusion` 或 `weighted_sum_ranking` |
-| `knowledge.retrieval.max_context_chars` | `12000` | 传给模型的检索上下文最大字符数 |
-| `knowledge.limits.max_file_bytes` | `5242880` | 单文件导入上限（字节） |
-| `knowledge.limits.max_files_per_call` | `20` | 每次导入调用的文件数上限 |
-| `knowledge.limits.max_chunks_per_document` | `1000` | 单文档切分块数上限 |
-| `postgres.managed` | `true` | 使用 Compose 托管的 PostgreSQL 服务 |
-| `postgres.user` | `zharness` | 托管 PostgreSQL 用户 |
-| `postgres.database` | `zharness` | 托管 PostgreSQL 数据库 |
-| `postgres.port` | `5432` | 托管 PostgreSQL 宿主端口 |
-| `postgres.uri` | 无 | 显式 PostgreSQL 连接 URI；覆盖全部托管设置（请保留在 `.env` 中） |
-| `langsmith.tracing` | `false` | 是否启用 LangSmith tracing |
-| `langsmith.project` | 无 | LangSmith 项目名称 |
-
-上表每个键都可用对应的 `ZHARNESS_*`（或 `LANGSMITH_*`）环境变量覆盖。API Key 和
-`LANGSMITH_API_KEY` 始终从环境（`.env`）读取。
+完整可选配置见
+[配置参考](zharness/docs/config-reference.zh-CN.md)。其中每个键都可用对应的
+`ZHARNESS_*`（或 `LANGSMITH_*`）环境变量覆盖。API Key 和 `LANGSMITH_API_KEY`
+始终从环境（`.env`）读取。
 
 在可信的本地开发环境（不使用 Docker）中，可设置例如：
 
@@ -293,6 +236,9 @@ PostgreSQL。`make stop` 会停止包括前端和托管 PostgreSQL 在内的完�
 如果 Windows 到 WSL 的 localhost 转发不可用，请使用 `make dev` 输出的网络网关地址，
 例如 `http://10.255.255.254:2026`。前端会根据浏览器当前访问来源解析
 `/api/langgraph`，因此本地网关与网络网关可以共用同一份配置。
+
+启动横幅还会输出运行中后端的 LangSmith Studio 地址；启用 tracing 时，还会输出
+配置的 LangSmith 项目 traces 的直接链接。
 
 ### 5. 运行冒烟验证
 
@@ -360,4 +306,8 @@ ZHARNESS_RUN_DOCKER_TESTS=1 uv run pytest zharness/tests/test_docker_integration
 - 本地沙箱提供商仅适用于单用户、可信的本地环境。宿主 bash 默认禁用，只有显式设置
   `sandbox.local.allow_host_bash: true` 才会启用，启用后命令将拥有 ZHarness 服务进程的
   宿主权限。
+- 长期记忆与检查点共用同一个 PostgreSQL 数据库。抽取在每轮结束后作为进程内的
+  后台任务按 thread 入队执行，因此不会阻塞本轮返回；排队的快照会被合并，每份快照
+  有 60 秒预算，服务关闭时最多等待 5 秒排空队列，然后取消剩余任务。设置专用
+  `memory.extraction_model` 或关闭抽取可将 token 成本保持在可预期范围。
 - `gateway` 尚未实现鉴权、转发或业务 API。
