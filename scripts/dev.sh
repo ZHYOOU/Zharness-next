@@ -331,6 +331,31 @@ print_gateway_urls() {
     done
 }
 
+print_studio_url() {
+    local host="$BACKEND_HOST"
+    # Convert bind-all addresses to browser-accessible loopback addresses. / 将全接口监听地址转换为浏览器可访问的回环地址。
+    case "$host" in
+        0.0.0.0) host="127.0.0.1" ;;
+        ::|\[::\]) host="[::1]" ;;
+        *:*) [[ "$host" == \[*\] ]] || host="[$host]" ;;
+    esac
+    printf 'LangSmith Studio: https://smith.langchain.com/studio/?baseUrl=http://%s:%s\n' "$host" "$BACKEND_PORT"
+}
+
+print_trace_url() {
+    local trace_url=""
+    # Bound optional remote lookup so tracing cannot block startup. / 限制可选远程查询耗时，避免追踪服务阻塞启动。
+    trace_url="$(cd "$REPO_ROOT" && timeout 5s uv run --offline --package zharness python scripts/trace_url.py 2>/dev/null)" || trace_url=""
+    if [[ -n "$trace_url" ]]; then
+        printf 'LangSmith Traces: %s\n' "$trace_url"
+    else
+        printf 'LangSmith Traces: https://smith.langchain.com (select project: %s; project URL unavailable)\n' "${LANGSMITH_PROJECT:-default}"
+    fi
+    if [[ "${LANGSMITH_TRACING:-false}" != "true" ]]; then
+        printf '  Tracing is disabled; set LANGSMITH_TRACING=true to record new traces.\n'
+    fi
+}
+
 start_development() {
     load_config
     _preflight
@@ -372,6 +397,8 @@ start_development() {
     printf '  ✓ ZHarness is running!\n'
     printf '==========================================\n'
     print_gateway_urls
+    print_studio_url
+    print_trace_url
     printf '\n  Press Ctrl+C to stop all services\n'
     printf '\n'
     wait

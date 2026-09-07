@@ -3,7 +3,6 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import {
   Brain,
-  Check,
   ChevronRight,
   Database,
   FileText,
@@ -22,8 +21,8 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { MemorySettings } from "@/components/memory-settings";
 
 type SettingsSection = "memory" | "knowledge" | "tools" | "skills";
 
@@ -115,70 +114,6 @@ function SectionHeading({
         <p className="text-muted-foreground mt-1.5 text-sm">{description}</p>
       </div>
       {action}
-    </div>
-  );
-}
-
-function MemorySettings() {
-  const [enabled, setEnabled] = useState(true);
-  const [memory, setMemory] = useState(
-    "我偏好简洁、直接的回答。涉及代码修改时，先说明改动范围，再给出结果。",
-  );
-  const [savedMemory, setSavedMemory] = useState(memory);
-
-  return (
-    <div className="space-y-6">
-      <SectionHeading
-        title="记忆"
-        description="管理 Agent 在不同对话间可以使用的长期信息。"
-      />
-      <div className="rounded-xl border p-5">
-        <div className="flex items-start justify-between gap-5">
-          <div>
-            <p className="font-medium">启用长期记忆</p>
-            <p className="text-muted-foreground mt-1 text-sm leading-6">
-              允许 Agent 在未来的对话中参考已保存的偏好和背景。
-            </p>
-          </div>
-          <Switch
-            aria-label="启用长期记忆"
-            checked={enabled}
-            onCheckedChange={setEnabled}
-          />
-        </div>
-      </div>
-      <div className="rounded-xl border p-5">
-        <label
-          htmlFor="memory-content"
-          className="font-medium"
-        >
-          关于我的记忆
-        </label>
-        <p className="text-muted-foreground mt-1 text-sm">
-          你可以直接编辑希望 Agent 记住的内容。
-        </p>
-        <Textarea
-          id="memory-content"
-          value={memory}
-          onChange={(event) => setMemory(event.target.value)}
-          disabled={!enabled}
-          className="mt-4 min-h-40 resize-none leading-6"
-          placeholder="例如：我的工作习惯、偏好或长期目标……"
-        />
-        <div className="mt-4 flex items-center justify-end gap-3">
-          {memory === savedMemory && (
-            <span className="text-muted-foreground flex items-center gap-1.5 text-sm">
-              <Check className="size-4" /> 已保存
-            </span>
-          )}
-          <Button
-            disabled={!enabled || memory === savedMemory}
-            onClick={() => setSavedMemory(memory)}
-          >
-            保存更改
-          </Button>
-        </div>
-      </div>
     </div>
   );
 }

@@ -36,7 +36,10 @@ config_values() {
     (
         cd "${REPO_ROOT}"
         uv run --package zharness python -c '
+from dotenv import load_dotenv
 from zharness.config import get_settings
+# Load the backend dotenv before resolving overrides. / 解析覆盖配置前加载后端 dotenv 文件。
+load_dotenv("zharness/.env", override=False)
 s = get_settings()
 lines = [
     "ZHARNESS_SERVER_HOST=%s" % s.server.host,

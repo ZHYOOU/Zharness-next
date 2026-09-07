@@ -12,10 +12,12 @@ from zharness.config import get_settings
 from zharness.host.paths import THREAD_ID_PATTERN, WorkspacePathError
 from zharness.knowledge import close_knowledge_service, get_knowledge_service
 from zharness.knowledge.service import KnowledgeUnavailableError
+from zharness.memory.middleware import drain_memory_tasks
 from zharness.sandbox.manager import (
     SandboxUnavailableError,
     get_sandbox_manager,
 )
+from zharness.server.memory import routes as memory_routes
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +102,7 @@ async def lifespan(_: Starlette) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        await drain_memory_tasks()
         cleanup_stop.set()
         if cleanup_task is not None:
             await cleanup_task
@@ -114,5 +117,5 @@ async def lifespan(_: Starlette) -> AsyncIterator[None]:
         await close_knowledge_service()
 
 
-app = Starlette(lifespan=lifespan)
+app = Starlette(lifespan=lifespan, routes=memory_routes)
 app.add_middleware(ThreadSandboxCleanupMiddleware)

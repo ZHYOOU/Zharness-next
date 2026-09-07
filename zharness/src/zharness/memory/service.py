@@ -241,6 +241,14 @@ class MemoryService:
             await self._merge_profile(result.profile)
         return metrics
 
+    async def list_facts(self) -> list[Fact]:
+        """List all facts without changing access heat. / 列出全部事实且不改变访问热度。"""
+        await self._ensure_ready()
+        try:
+            return await self._repository.all_facts()
+        except Exception as exc:
+            raise MemoryUnavailableError(str(exc)) from exc
+
     async def get_profile(self) -> MemoryProfile | None:
         """Return the stored user profile, or ``None`` when absent.
 

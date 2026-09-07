@@ -4,17 +4,25 @@ Three responsibilities:
 - Register the ``memory_*`` tools so the agent can recall and edit facts on demand.
 - Inject the top facts and user profile into every asynchronous model call as a
   hidden memory block (``awrap_model_call``).
-- Extract new memories after each completed turn (``aafter_agent``), advancing a
+- Queue detached background extraction after each turn (``aafter_agent``), advancing a
   per-thread watermark only after a successful write so failures retry next turn.
 
 三项职责：
 - 注册 ``memory_*`` 工具，供 agent 按需召回与编辑事实。
 - 在每次异步模型调用时，以隐藏记忆块注入顶级事实与用户画像（``awrap_model_call``）。
-- 每轮结束后抽取新记忆（``aafter_agent``），仅写入成功后推进线程级水位，失败在下一轮重试。
+- 每轮结束后排队执行独立后台抽取（``aafter_agent``），仅写入成功后推进线程级水位，失败在下一轮重试。
+
+Tasks are process-local: shutdown allows five seconds to drain, then cancels
+remaining work. A crash does not preserve the queue or watermarks.
+
+任务保存在当前进程内：关闭时最多等待五秒，然后取消剩余任务。
+进程崩溃不会保留队列或水位。
 """
 
 from __future__ import annotations
 
+import asyncio
+import contextvars
 import logging
 from typing import Any
 
@@ -33,6 +41,20 @@ from zharness.memory.tools import (
 )
 
 logger = logging.getLogger(__name__)
+
+_BACKGROUND_TASKS: set[asyncio.Task[None]] = set()
+
+
+async def drain_memory_tasks(timeout: float = 5.0) -> None:
+    """Drain background extraction with a bounded shutdown wait. / 在限定的关闭等待时间内完成后台抽取。"""
+    tasks = list(_BACKGROUND_TASKS)
+    if not tasks:
+        return
+    _, pending = await asyncio.wait(tasks, timeout=timeout)
+    for task in pending:
+        task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+
 
 _EXISTING_FACTS_CAP = 100
 """Facts fed back into the extraction prompt to avoid re-adding known entries. / 反馈给抽取提示词以避免重复添加的既有事实上限。"""
@@ -80,6 +102,8 @@ class MemoryMiddleware(AgentMiddleware[Any, Any, ResponseT]):
         self._injection_max_chars = injection_max_chars
         self._extract_window = extract_window
         self._watermarks: dict[str, str] = {}
+        self._pending: dict[str | None, list[AnyMessage]] = {}
+        self._workers: dict[str | None, asyncio.Task[None]] = {}
         self._warned_config_error = False
         self.tools = [
             memory_search,
@@ -121,7 +145,7 @@ class MemoryMiddleware(AgentMiddleware[Any, Any, ResponseT]):
         state: dict[str, Any],
         runtime: Any,
     ) -> dict[str, Any] | None:
-        """Extract new memories after a completed agent turn. / 在 agent 回合结束后抽取新记忆。"""
+        """Queue extraction without delaying the completed turn. / 将抽取入队而不延迟已完成的回合。"""
         if not (self._enabled and self._extraction_enabled):
             return None
         messages = list(state.get("messages") or [])
@@ -131,11 +155,49 @@ class MemoryMiddleware(AgentMiddleware[Any, Any, ResponseT]):
             isinstance(message, HumanMessage) for message in new_messages
         ):
             return None
+        self._pending[thread_id] = [
+            message.model_copy(deep=True) for message in messages
+        ]
+        if thread_id not in self._workers:
+            # Detach run callbacks and stream context from background work. / 将运行回调及流上下文与后台任务隔离。
+            task = asyncio.create_task(
+                self._extract_pending(thread_id),
+                name=f"memory-extraction:{thread_id}",
+                context=contextvars.Context(),
+            )
+            self._workers[thread_id] = task
+            _BACKGROUND_TASKS.add(task)
+            task.add_done_callback(
+                _BACKGROUND_TASKS.discard, context=contextvars.Context()
+            )
+        return None
+
+    async def _extract_pending(self, thread_id: str | None) -> None:
+        """Serialize each thread and coalesce queued conversation snapshots. / 串行处理各线程并合并排队的对话快照。"""
+        try:
+            while thread_id in self._pending:
+                messages = self._pending.pop(thread_id)
+                try:
+                    async with asyncio.timeout(60):
+                        await self._extract_snapshot(thread_id, messages)
+                except TimeoutError:
+                    logger.warning("Memory extraction timed out (thread %s)", thread_id)
+        finally:
+            self._pending.pop(thread_id, None)
+            self._workers.pop(thread_id, None)
+
+    async def _extract_snapshot(
+        self, thread_id: str | None, messages: list[AnyMessage]
+    ) -> None:
+        """Extract a snapshot and advance its watermark only on success. / 抽取快照并仅在成功时推进水位。"""
+        new_messages = self._new_messages(thread_id, messages)
+        if not any(isinstance(message, HumanMessage) for message in new_messages):
+            return
         try:
             service = get_memory_service()
         except RuntimeError:
             self._warn_config_error_once()
-            return None
+            return
         try:
             existing = await service.top_facts(
                 limit=_EXISTING_FACTS_CAP,
@@ -147,6 +209,7 @@ class MemoryMiddleware(AgentMiddleware[Any, Any, ResponseT]):
                 new_messages,
                 existing,
                 profile,
+                strict=True,
             )
             metrics = await service.apply_extraction(result, thread_id=thread_id)
             if metrics.get("added"):
@@ -165,7 +228,7 @@ class MemoryMiddleware(AgentMiddleware[Any, Any, ResponseT]):
             logger.exception(
                 "Memory extraction failed; watermark not advanced, will retry"
             )
-        return None
+        return
 
     def after_agent(
         self,

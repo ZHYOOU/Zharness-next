@@ -1,5 +1,24 @@
 # Agent Chat UI
 
+## 记忆管理接入
+
+设置中的「记忆」页使用与聊天相同的 API 地址与连接凭据。项目的 `make dev`
+入口通过 Nginx 将 `/api/langgraph/memory` 转发至 zharness；更改后重启后端并刷新前端。
+若单独运行前端，可设置 `NEXT_PUBLIC_API_URL=http://localhost:2024` 直连后端，
+或设置 `NEXT_PUBLIC_API_URL=/api` 和 `LANGGRAPH_API_URL=http://localhost:2024`
+使用 Next.js 代理。
+
+页面支持持久化记忆的新增、编辑、删除、内容搜索和分类筛选，并展示自动生成的
+工作背景、个人背景和近期关注画像。画像目前只读，删除单条事实不会同步删除画像。
+长期记忆、自动提取和对话引用的开关来自 `zharness/config.yaml` 的 `memory`
+配置，页面只展示状态；停用后仍可管理已保存的数据。
+
+HTTP 接口：`GET /memory/status` 获取配置状态，`GET /memory` 获取全部事实和画像，
+`POST /memory` 新增，`PUT /memory/{id}` 编辑，`DELETE /memory/{id}` 删除。
+新增和编辑传入 `content`、`category`、`confidence`，使用 Agent 相同的 PostgreSQL
+存储及记忆服务。列表读取不会增加访问热度；新增遵循去重和容量淘汰策略。
+数据库不可用返回 503，非法输入返回 422，重复新增返回 409，记录不存在返回 404。
+
 Agent Chat UI is a Next.js application which enables chatting with any LangGraph server with a `messages` key through a chat interface.
 
 > [!NOTE]

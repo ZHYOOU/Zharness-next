@@ -111,16 +111,32 @@ async def extract_memories(
     messages: list[AnyMessage],
     existing_facts: list[Fact],
     profile: MemoryProfile | None,
+    *,
+    strict: bool = False,
 ) -> ExtractionResult:
     """Extract candidate memories from a conversation tail. / 从会话尾部抽取候选记忆。"""
     if not messages:
         return ExtractionResult()
     prompt = SystemMessage(content=build_extraction_prompt(existing_facts, profile))
     try:
-        response = await model.ainvoke([prompt, *messages])
+        response = await model.ainvoke(
+            [prompt, *messages],
+            config={
+                "run_name": "memory_extraction",
+                "metadata": {"lc_source": "memory_extraction"},
+            },
+        )
     except Exception:
         logger.exception("Memory extraction model call failed")
+        if strict:
+            raise
         return ExtractionResult()
+    if strict:
+        payload = _coerce_content(response.content)
+        data = _extract_json(payload) if payload else None
+        if data is None:
+            raise ValueError("Memory extraction returned non-JSON content")
+        return ExtractionResult.model_validate(data)
     return parse_extraction_response(response.content)
 
 

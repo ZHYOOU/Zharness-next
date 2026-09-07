@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextvars
+
 import pytest
 from langchain_core.language_models.fake_chat_models import (
     FakeMessagesListChatModel,
@@ -9,7 +12,7 @@ from langchain_core.language_models.fake_chat_models import (
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from zharness.memory import middleware as middleware_module
 from zharness.memory import service as service_module
-from zharness.memory.middleware import MemoryMiddleware
+from zharness.memory.middleware import MemoryMiddleware, drain_memory_tasks
 from zharness.memory.types import Fact, MemoryProfile, utcnow
 
 _EMPTY_EXTRACTION = '{"facts": [], "removals": [], "profile": null}'
@@ -174,6 +177,7 @@ async def test_aafter_agent_extracts_new_messages(monkeypatch) -> None:
     result = await middleware.aafter_agent({"messages": messages}, _runtime("thread-1"))
 
     assert result is None
+    await drain_memory_tasks()
     assert service.extraction_calls == ["thread-1"]
     assert middleware._watermarks["thread-1"] == "m2"
 
@@ -188,6 +192,7 @@ async def test_aafter_agent_skips_repeated_extraction(monkeypatch) -> None:
     await middleware.aafter_agent({"messages": messages}, _runtime("thread-1"))
     await middleware.aafter_agent({"messages": messages}, _runtime("thread-1"))
 
+    await drain_memory_tasks()
     assert len(service.extraction_calls) == 1
 
 
@@ -205,6 +210,7 @@ async def test_aafter_agent_does_not_advance_watermark_on_failure(monkeypatch) -
 
     await middleware.aafter_agent({"messages": messages}, _runtime("thread-1"))
 
+    await drain_memory_tasks()
     assert "thread-1" not in middleware._watermarks
 
 
@@ -255,6 +261,7 @@ async def test_aafter_agent_warns_once_on_missing_config(monkeypatch, caplog) ->
     await middleware.aafter_agent({"messages": messages}, _runtime("thread-1"))
     await middleware.aafter_agent({"messages": messages}, _runtime("thread-1"))
 
+    await drain_memory_tasks()
     warnings = [record for record in caplog.records if record.levelname == "WARNING"]
     assert len(warnings) == 1
     assert "PostgreSQL is not configured" in warnings[0].message
@@ -264,3 +271,151 @@ def _runtime(thread_id: str):
     from types import SimpleNamespace
 
     return SimpleNamespace(execution_info=SimpleNamespace(thread_id=thread_id))
+
+
+@pytest.mark.asyncio
+async def test_background_extraction_does_not_block_and_detaches_context(monkeypatch):
+    started, release = asyncio.Event(), asyncio.Event()
+    marker = contextvars.ContextVar("test_run_context", default=None)
+    observed = []
+
+    class SlowService(_FakeService):
+        async def apply_extraction(self, result, *, thread_id=None):
+            observed.append(marker.get())
+            started.set()
+            await release.wait()
+            return await super().apply_extraction(result, thread_id=thread_id)
+
+    service = SlowService()
+    monkeypatch.setattr(middleware_module, "get_memory_service", lambda: service)
+    middleware = _middleware()
+    token = marker.set("parent-stream")
+    try:
+        await asyncio.wait_for(
+            middleware.aafter_agent(
+                {"messages": [HumanMessage(content="Hello", id="m1")]}, _runtime("t")
+            ),
+            timeout=1,
+        )
+        await asyncio.wait_for(started.wait(), timeout=1)
+        assert service.extraction_calls == []
+        assert observed == [None]
+        assert "t" not in middleware._watermarks
+    finally:
+        marker.reset(token)
+        release.set()
+        await drain_memory_tasks()
+    assert middleware._watermarks["t"] == "m1"
+
+
+@pytest.mark.asyncio
+async def test_queued_turns_are_serialized_and_deduplicated(monkeypatch):
+    started, release = asyncio.Event(), asyncio.Event()
+
+    class SlowService(_FakeService):
+        async def apply_extraction(self, result, *, thread_id=None):
+            started.set()
+            await release.wait()
+            return await super().apply_extraction(result, thread_id=thread_id)
+
+    service = SlowService()
+    monkeypatch.setattr(middleware_module, "get_memory_service", lambda: service)
+    middleware = _middleware()
+    first = HumanMessage(content="Hello", id="m1")
+    second = HumanMessage(content="I like Python", id="m2")
+    await middleware.aafter_agent({"messages": [first]}, _runtime("t"))
+    await asyncio.wait_for(started.wait(), timeout=1)
+    for _ in range(3):
+        await middleware.aafter_agent({"messages": [first, second]}, _runtime("t"))
+    assert len(middleware._workers) == 1
+    release.set()
+    await drain_memory_tasks()
+    assert service.extraction_calls == ["t", "t"]
+    assert middleware._watermarks["t"] == "m2"
+
+
+@pytest.mark.asyncio
+async def test_shutdown_cancels_unfinished_extraction(monkeypatch):
+    started = asyncio.Event()
+
+    class SlowService(_FakeService):
+        async def top_facts(self, *args, **kwargs):
+            started.set()
+            await asyncio.Event().wait()
+
+    monkeypatch.setattr(middleware_module, "get_memory_service", lambda: SlowService())
+    middleware = _middleware()
+    await middleware.aafter_agent(
+        {"messages": [HumanMessage(content="Hello", id="m1")]}, _runtime("t")
+    )
+    await asyncio.wait_for(started.wait(), timeout=1)
+    await drain_memory_tasks(timeout=0)
+    assert not middleware._workers
+    assert not middleware._watermarks
+
+
+@pytest.mark.asyncio
+async def test_invalid_extraction_retries_on_next_turn(monkeypatch):
+    service = _FakeService()
+    monkeypatch.setattr(middleware_module, "get_memory_service", lambda: service)
+    middleware = _middleware(
+        model=FakeMessagesListChatModel(
+            responses=[
+                AIMessage(content="Already remembered!"),
+                AIMessage(content=_EMPTY_EXTRACTION),
+            ]
+        )
+    )
+    state = {"messages": [HumanMessage(content="Hello", id="m1")]}
+    await middleware.aafter_agent(state, _runtime("t"))
+    await drain_memory_tasks()
+    assert not middleware._watermarks
+    await middleware.aafter_agent(state, _runtime("t"))
+    await drain_memory_tasks()
+    assert middleware._watermarks["t"] == "m1"
+
+
+@pytest.mark.asyncio
+async def test_graph_stream_finishes_before_background_model(monkeypatch):
+    from langgraph.graph import END, START, StateGraph
+
+    release = asyncio.Event()
+
+    class SlowModel(FakeMessagesListChatModel):
+        async def ainvoke(self, *args, **kwargs):
+            await release.wait()
+            return await super().ainvoke(*args, **kwargs)
+
+    service = _FakeService()
+    monkeypatch.setattr(middleware_module, "get_memory_service", lambda: service)
+    middleware = _middleware(
+        model=SlowModel(responses=[AIMessage(content=_EMPTY_EXTRACTION)])
+    )
+
+    async def finish(state):
+        await middleware.aafter_agent(state, _runtime("t"))
+        return state
+
+    builder = StateGraph(dict)
+    builder.add_node("finish", finish)
+    builder.add_edge(START, "finish")
+    builder.add_edge("finish", END)
+    graph = builder.compile()
+
+    async def consume():
+        return [
+            event
+            async for event in graph.astream_events(
+                {"messages": [HumanMessage(content="Remember me", id="m1")]},
+                version="v2",
+            )
+        ]
+
+    try:
+        events = await asyncio.wait_for(consume(), timeout=1)
+        assert not service.extraction_calls
+    finally:
+        release.set()
+        await drain_memory_tasks()
+    assert service.extraction_calls == ["t"]
+    assert not any(event["event"].startswith("on_chat_model") for event in events)
