@@ -11,6 +11,10 @@ The project is still in an early stage of development. `zharness` contains the
 main runtime capabilities, while `gateway` is currently a placeholder for a
 future gateway layer.
 
+## Frontend Preview
+
+![New conversation page](docs/img.png)
+
 ## Features
 
 - A Lead Agent built with LangGraph and LangChain.

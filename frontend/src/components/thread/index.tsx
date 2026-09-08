@@ -48,6 +48,18 @@ import {
   useArtifactContext,
 } from "./artifact";
 
+const GREETINGS = [
+  "Hello! How can I help you today?",
+  "Good to see you! What would you like to work on?",
+  "Hi there! What is on your mind?",
+  "Welcome back! How can I assist you?",
+  "Ready when you are. What shall we explore?",
+];
+
+function getRandomGreeting() {
+  return GREETINGS[Math.floor(Math.random() * GREETINGS.length)];
+}
+
 function StickyToBottomContent(props: {
   content: ReactNode;
   footer?: ReactNode;
@@ -131,6 +143,7 @@ export function Thread() {
     parseAsBoolean.withDefault(true),
   );
   const [input, setInput] = useState("");
+  const [greeting, setGreeting] = useState(GREETINGS[0]);
   const {
     contentBlocks,
     setContentBlocks,
@@ -157,6 +170,19 @@ export function Thread() {
     closeArtifact();
     setArtifactContext({});
   };
+
+  const startNewThread = () => {
+    setGreeting(getRandomGreeting());
+    setThreadId(null);
+  };
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setGreeting(getRandomGreeting());
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   useEffect(() => {
     if (!stream.error) {
@@ -356,7 +382,7 @@ export function Thread() {
                 </div>
                 <motion.button
                   className="flex cursor-pointer items-center gap-2"
-                  onClick={() => setThreadId(null)}
+                  onClick={startNewThread}
                   animate={{
                     marginLeft: !chatHistoryOpen ? 48 : 0,
                   }}
@@ -386,7 +412,7 @@ export function Thread() {
                   className="p-4"
                   tooltip="New thread"
                   variant="ghost"
-                  onClick={() => setThreadId(null)}
+                  onClick={startNewThread}
                 >
                   <SquarePen className="size-5" />
                 </TooltipIconButton>
@@ -448,7 +474,7 @@ export function Thread() {
                   {!chatStarted && (
                     <div className="flex items-center gap-3">
                       <h1 className="text-2xl font-semibold tracking-tight">
-                        ZHarness
+                        {greeting}
                       </h1>
                     </div>
                   )}
