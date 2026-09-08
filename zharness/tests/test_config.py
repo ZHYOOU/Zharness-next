@@ -11,6 +11,7 @@ from zharness.config.loader import CONFIG_PATH_ENV
 _ZHARNESS_ENV_VARS = (
     "ZHARNESS_MODEL",
     "ZHARNESS_MODEL_PROVIDER",
+    "ZHARNESS_TOKEN_USAGE_ENABLED",
     "ZHARNESS_OPENAI_BASE_URL",
     "ZHARNESS_ANTHROPIC_BASE_URL",
     "ZHARNESS_MIMO_BASE_URL",
@@ -147,6 +148,7 @@ def test_defaults_without_config_file(tmp_path: Path) -> None:
     )
     assert settings.langsmith.tracing is False
     assert settings.langsmith.project is None
+    assert settings.token_usage.enabled is True
 
 
 def test_yaml_provides_values(tmp_path: Path) -> None:
@@ -192,6 +194,8 @@ memory:
 langsmith:
   tracing: true
   project: my-project
+token_usage:
+  enabled: false
 """,
     )
 
@@ -228,6 +232,7 @@ langsmith:
     assert settings.memory.injection_max_chars == 5000
     assert settings.langsmith.tracing is True
     assert settings.langsmith.project == "my-project"
+    assert settings.token_usage.enabled is False
 
 
 def test_environment_overrides_yaml(monkeypatch, tmp_path: Path) -> None:
@@ -307,10 +312,12 @@ def test_boolean_environment_parsing(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("ZHARNESS_MEMORY_ENABLED", "false")
     monkeypatch.setenv("ZHARNESS_MEMORY_GATE_ENABLED", "no")
     monkeypatch.setenv("ZHARNESS_MEMORY_INJECTION_ENABLED", "off")
+    monkeypatch.setenv("ZHARNESS_TOKEN_USAGE_ENABLED", "false")
     settings = load_settings(path)
     assert settings.memory.enabled is False
     assert settings.memory.gate_enabled is False
     assert settings.memory.injection_enabled is False
+    assert settings.token_usage.enabled is False
 
 
 def test_memory_environment_overrides_yaml(monkeypatch, tmp_path: Path) -> None:

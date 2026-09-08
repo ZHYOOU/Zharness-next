@@ -90,6 +90,7 @@ def create_chat_model(model_name: str, *, temperature: float = 0) -> BaseChatMod
             max_retries=DEFAULT_MAX_RETRIES,
             api_key=os.environ.get("MIMO_API_KEY"),
             base_url=settings.model.mimo_base_url or DEFAULT_MIMO_BASE_URL,
+            stream_usage=True,
         )
     if provider == PROVIDER_DEEPSEEK:
         return ChatDeepSeek(
@@ -97,6 +98,7 @@ def create_chat_model(model_name: str, *, temperature: float = 0) -> BaseChatMod
             temperature=temperature,
             timeout=DEFAULT_TIMEOUT_SECONDS,
             max_retries=DEFAULT_MAX_RETRIES,
+            stream_usage=True,
         )
     if provider == PROVIDER_OPENAI:
         return ChatOpenAI(
@@ -105,6 +107,7 @@ def create_chat_model(model_name: str, *, temperature: float = 0) -> BaseChatMod
             timeout=DEFAULT_TIMEOUT_SECONDS,
             max_retries=DEFAULT_MAX_RETRIES,
             base_url=settings.model.openai_base_url,
+            stream_usage=True,
         )
     if provider == PROVIDER_ANTHROPIC:
         from langchain_anthropic import ChatAnthropic
@@ -115,6 +118,7 @@ def create_chat_model(model_name: str, *, temperature: float = 0) -> BaseChatMod
             timeout=DEFAULT_TIMEOUT_SECONDS,
             max_retries=DEFAULT_MAX_RETRIES,
             base_url=settings.model.anthropic_base_url,
+            stream_usage=True,
         )
     raise ValueError(
         f"Unsupported ZHARNESS_MODEL_PROVIDER {provider!r}; expected one of "

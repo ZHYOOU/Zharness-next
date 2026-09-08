@@ -57,6 +57,9 @@ DEFAULT_TITLE_PROMPT_TEMPLATE = (
     "Return ONLY the title, no quotes, no explanation."
 )
 
+DEFAULT_TOKEN_USAGE_ENABLED = True
+"""Whether model token usage is collected by default. / 是否默认收集模型 token 用量。"""
+
 DEFAULT_KNOWLEDGE_ENABLED = True
 DEFAULT_KNOWLEDGE_EMBEDDING_MODEL = "text-embedding-v4"
 DEFAULT_KNOWLEDGE_EMBEDDING_DIMENSIONS = 1024
@@ -408,6 +411,13 @@ class LangsmithSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class TokenUsageSettings:
+    """Token usage collection settings. / Token 用量收集配置。"""
+
+    enabled: bool = DEFAULT_TOKEN_USAGE_ENABLED
+
+
+@dataclass(frozen=True, slots=True)
 class Settings:
     """Root settings object mirroring the YAML config file. / 对应 YAML 配置文件结构的根配置对象。"""
 
@@ -421,4 +431,5 @@ class Settings:
     memory: MemorySettings = field(default_factory=MemorySettings)
     title: TitleSettings = field(default_factory=TitleSettings)
     knowledge: KnowledgeSettings = field(default_factory=KnowledgeSettings)
+    token_usage: TokenUsageSettings = field(default_factory=TokenUsageSettings)
     langsmith: LangsmithSettings = field(default_factory=LangsmithSettings)

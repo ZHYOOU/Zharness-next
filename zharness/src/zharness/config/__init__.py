@@ -32,6 +32,7 @@ from zharness.config.settings import (
     Settings,
     SkillsSettings,
     TitleSettings,
+    TokenUsageSettings,
 )
 
 __all__ = [
@@ -53,6 +54,7 @@ __all__ = [
     "Settings",
     "SkillsSettings",
     "TitleSettings",
+    "TokenUsageSettings",
     "get_settings",
     "load_settings",
     "resolve_config_path",

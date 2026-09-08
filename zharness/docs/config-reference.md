@@ -20,6 +20,17 @@ the environment (`.env`).
 | `model.anthropic_base_url` | None | Base URL override for the Anthropic provider |
 | `model.mimo_base_url` | `https://api.xiaomimimo.com/v1` | Base URL override for the MiMo provider |
 
+## Token Usage
+
+| Key | Default | Purpose |
+| --- | --- | --- |
+| `token_usage.enabled` | `true` | Collect provider-reported input, output, and total tokens for lead and subagent model calls |
+
+Set `ZHARNESS_TOKEN_USAGE_ENABLED=false` to disable the accounting middleware.
+When enabled, each `AIMessage` retains its provider `usage_metadata`; delegated
+usage is folded into the parent dispatch message so summing unique AI messages
+produces the complete conversation total.
+
 ## Server and Runtime
 
 | Key | Default | Purpose |

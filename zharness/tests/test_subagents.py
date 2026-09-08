@@ -9,6 +9,7 @@ from langchain_core.language_models.fake_chat_models import FakeMessagesListChat
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import RunnableLambda
 from zharness.middleware import SubAgentMiddleware
+from zharness.middleware.token_usage import SUBAGENT_TOKEN_USAGE_KEY
 
 
 class ToolCallingFakeModel(FakeMessagesListChatModel):
@@ -80,6 +81,102 @@ def test_subagent_handoff_returns_final_report() -> None:
     ]
     assert tool_messages[-1].content == "Parser report"
     assert result["messages"][-1].content == "Integrated report"
+
+
+def test_subagent_handoff_exposes_cumulative_token_usage() -> None:
+    """Expose hidden subagent model usage to the parent. / 向父 Agent 暴露隐藏的子 Agent 模型用量。"""
+
+    def run_subagent(state):
+        return {
+            "messages": [
+                *state["messages"],
+                AIMessage(
+                    content="first",
+                    usage_metadata={
+                        "input_tokens": 10,
+                        "output_tokens": 2,
+                        "total_tokens": 12,
+                    },
+                ),
+                AIMessage(
+                    content="final",
+                    usage_metadata={
+                        "input_tokens": 20,
+                        "output_tokens": 4,
+                        "total_tokens": 24,
+                    },
+                ),
+            ]
+        }
+
+    middleware = SubAgentMiddleware(
+        subagents=[
+            {
+                "name": "researcher",
+                "description": "Inspects source code.",
+                "runnable": RunnableLambda(run_subagent),
+            }
+        ],
+        timeout_seconds=None,
+    )
+    result = middleware.tools[0].func(
+        description="Inspect the parser.",
+        subagent_type="researcher",
+        runtime=_tool_runtime(),
+    )
+
+    assert result.update["messages"][0].additional_kwargs[SUBAGENT_TOKEN_USAGE_KEY] == {
+        "input_tokens": 30,
+        "output_tokens": 6,
+        "total_tokens": 36,
+    }
+
+
+def test_forked_subagent_usage_excludes_inherited_history() -> None:
+    """Do not count inherited parent usage as delegated usage. / 不把继承的父级用量计入委派用量。"""
+    inherited = AIMessage(
+        id="parent-turn",
+        content="previous",
+        usage_metadata={"input_tokens": 100, "output_tokens": 20, "total_tokens": 120},
+    )
+
+    def run_subagent(state):
+        return {
+            "messages": [
+                *state["messages"],
+                AIMessage(
+                    content="report",
+                    usage_metadata={
+                        "input_tokens": 10,
+                        "output_tokens": 2,
+                        "total_tokens": 12,
+                    },
+                ),
+            ]
+        }
+
+    middleware = SubAgentMiddleware(
+        subagents=[
+            {
+                "name": "researcher",
+                "description": "Inspects source code.",
+                "runnable": RunnableLambda(run_subagent),
+                "mode": "fork",
+            }
+        ],
+        timeout_seconds=None,
+    )
+    result = middleware.tools[0].func(
+        description="Inspect the parser.",
+        subagent_type="researcher",
+        runtime=_tool_runtime([HumanMessage(content="question"), inherited]),
+    )
+
+    assert result.update["messages"][0].additional_kwargs[SUBAGENT_TOKEN_USAGE_KEY] == {
+        "input_tokens": 10,
+        "output_tokens": 2,
+        "total_tokens": 12,
+    }
 
 
 def test_forked_subagent_inherits_parent_conversation() -> None:

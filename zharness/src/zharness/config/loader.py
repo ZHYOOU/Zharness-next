@@ -76,6 +76,7 @@ from zharness.config.settings import (
     DEFAULT_TITLE_MAX_WORDS,
     DEFAULT_TITLE_MODEL_NAME,
     DEFAULT_TITLE_PROMPT_TEMPLATE,
+    DEFAULT_TOKEN_USAGE_ENABLED,
     DockerSandboxSettings,
     KnowledgeChunkingSettings,
     KnowledgeEmbeddingSettings,
@@ -93,6 +94,7 @@ from zharness.config.settings import (
     Settings,
     SkillsSettings,
     TitleSettings,
+    TokenUsageSettings,
 )
 
 CONFIG_PATH_ENV: Final = "ZHARNESS_CONFIG"
@@ -218,6 +220,7 @@ def load_settings(path: str | Path | None = None) -> Settings:
         knowledge_hybrid.get("fusion_function_parameters") or {}
     )
     knowledge_limits = knowledge.get("limits") or {}
+    token_usage = data.get("token_usage") or {}
     langsmith = data.get("langsmith") or {}
 
     return Settings(
@@ -560,6 +563,13 @@ def load_settings(path: str | Path | None = None) -> Settings:
                     knowledge_limits.get("max_chunks_per_document"),
                     DEFAULT_KNOWLEDGE_MAX_CHUNKS_PER_DOCUMENT,
                 ),
+            ),
+        ),
+        token_usage=TokenUsageSettings(
+            enabled=_pick_bool(
+                "ZHARNESS_TOKEN_USAGE_ENABLED",
+                token_usage.get("enabled"),
+                DEFAULT_TOKEN_USAGE_ENABLED,
             ),
         ),
         langsmith=LangsmithSettings(

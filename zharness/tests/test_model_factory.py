@@ -51,6 +51,7 @@ def test_create_chat_model_mimo(monkeypatch) -> None:
     assert model.temperature == 0
     assert model.request_timeout == 60
     assert model.max_retries == 3
+    assert model.stream_usage is True
 
 
 def test_create_chat_model_mimo_base_url_override(monkeypatch) -> None:
@@ -73,6 +74,7 @@ def test_create_chat_model_openai(monkeypatch) -> None:
     assert isinstance(model, ChatOpenAI)
     assert model.model_name == "gpt-4o"
     assert model.temperature == 0
+    assert model.stream_usage is True
     assert model.request_timeout == 60
     assert model.max_retries == 3
 
@@ -96,6 +98,7 @@ def test_create_chat_model_deepseek(monkeypatch) -> None:
     assert isinstance(model, ChatDeepSeek)
     assert model.model_name == "deepseek-chat"
     assert model.temperature == 0
+    assert model.stream_usage is True
 
 
 def test_create_chat_model_anthropic(monkeypatch) -> None:
@@ -107,6 +110,7 @@ def test_create_chat_model_anthropic(monkeypatch) -> None:
     assert model.model == "claude-sonnet-4-5"
     assert model.default_request_timeout == 60
     assert model.max_retries == 3
+    assert model.stream_usage is True
 
 
 def test_create_chat_model_rejects_unknown_provider(monkeypatch) -> None:

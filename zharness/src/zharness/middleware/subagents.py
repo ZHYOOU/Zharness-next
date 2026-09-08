@@ -23,11 +23,22 @@ from langchain.agents.middleware.types import (
 from langchain.agents.structured_output import ResponseFormat
 from langchain.tools import BaseTool, ToolRuntime
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import (
+    AIMessage,
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
+)
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.tools import StructuredTool
 from langgraph.types import Command
 from pydantic import BaseModel, Field
+
+from zharness.middleware.token_usage import (
+    SUBAGENT_TOKEN_USAGE_KEY,
+    accumulate_token_usage,
+)
 
 DEFAULT_SUBAGENT_PROMPT = """Complete the delegated objective autonomously using the tools available to you.
 
@@ -272,7 +283,10 @@ def _last_ai_text(messages: Sequence[Any]) -> str:
 
 
 def _result_command(
-    result: dict[str, Any], tool_call_id: str, private_state_keys: frozenset[str]
+    result: dict[str, Any],
+    tool_call_id: str,
+    private_state_keys: frozenset[str],
+    input_messages: Sequence[BaseMessage],
 ) -> Command:
     """Convert subagent state into a parent graph update. / 将子智能体状态转换为父图更新。"""
     if "messages" not in result:
@@ -290,10 +304,31 @@ def _result_command(
         for key, value in result.items()
         if key not in _EXCLUDED_STATE_KEYS and key not in private_state_keys
     }
+    result_messages = result["messages"]
+    common_prefix_length = 0
+    for input_message, result_message in zip(
+        input_messages, result_messages, strict=False
+    ):
+        if input_message != result_message:
+            break
+        common_prefix_length += 1
+    usage_messages = (
+        result_messages[common_prefix_length:]
+        if common_prefix_length == len(input_messages)
+        else result_messages
+    )
+    usage = accumulate_token_usage(usage_messages)
+    additional_kwargs = {SUBAGENT_TOKEN_USAGE_KEY: usage} if usage else {}
     return Command(
         update={
             **state_update,
-            "messages": [ToolMessage(content=content, tool_call_id=tool_call_id)],
+            "messages": [
+                ToolMessage(
+                    content=content,
+                    tool_call_id=tool_call_id,
+                    additional_kwargs=additional_kwargs,
+                )
+            ],
         }
     )
 
@@ -433,7 +468,12 @@ def _build_task_tool(
                     sync_semaphore.release()
         finally:
             _SUBAGENT_DEPTH.reset(depth_token)
-        return _result_command(result, runtime.tool_call_id, private_state_keys)
+        return _result_command(
+            result,
+            runtime.tool_call_id,
+            private_state_keys,
+            state["messages"],
+        )
 
     async def atask(
         description: str, subagent_type: str, runtime: ToolRuntime
@@ -466,7 +506,12 @@ def _build_task_tool(
                     async_semaphore.release()
         finally:
             _SUBAGENT_DEPTH.reset(depth_token)
-        return _result_command(result, runtime.tool_call_id, private_state_keys)
+        return _result_command(
+            result,
+            runtime.tool_call_id,
+            private_state_keys,
+            state["messages"],
+        )
 
     return StructuredTool.from_function(
         name="task",

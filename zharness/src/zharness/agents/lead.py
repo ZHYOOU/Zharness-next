@@ -27,6 +27,7 @@ from zharness.middleware import (
     SubAgentMiddleware,
     SubAgentSpec,
     TitleMiddleware,
+    TokenUsageMiddleware,
 )
 from zharness.models.factory import create_chat_model
 from zharness.skills import (
@@ -385,6 +386,8 @@ def create_lead_agent(
                 system_prompt=SUBAGENT_SYSTEM_PROMPT,
             )
         )
+    if settings.token_usage.enabled:
+        middleware.append(TokenUsageMiddleware())
     middleware.extend(
         [
             HumanInTheLoopMiddleware(

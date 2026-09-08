@@ -33,6 +33,7 @@ def test_create_lead_agent(tmp_path, monkeypatch) -> None:
     assert "DynamicDateMiddleware.before_agent" in agent.nodes
     assert "SummarizationMiddleware.before_model" in agent.nodes
     assert "HumanInTheLoopMiddleware.after_model" in agent.nodes
+    assert "TokenUsageMiddleware.after_model" in agent.nodes
     assert set(agent.nodes["tools"].bound.tools_by_name) == {
         "write_todos",
         "list_workspace",
@@ -67,6 +68,19 @@ def test_create_lead_agent_omits_memory_tools_when_disabled(
 
     assert "memory_search" not in agent.nodes["tools"].bound.tools_by_name
     assert "memory_add" not in agent.nodes["tools"].bound.tools_by_name
+
+
+def test_create_lead_agent_omits_token_usage_middleware_when_disabled(
+    tmp_path, monkeypatch
+) -> None:
+    """Honor the token usage master switch. / 遵循 token 用量总开关。"""
+    monkeypatch.setenv("ZHARNESS_SKILLS_PATH", str(tmp_path / "no-skills"))
+    monkeypatch.setenv("ZHARNESS_TOKEN_USAGE_ENABLED", "false")
+    model = ToolCallingFakeModel(responses=[AIMessage(content="hello")])
+
+    agent = create_lead_agent(model)
+
+    assert "TokenUsageMiddleware.after_model" not in agent.nodes
 
 
 def test_create_lead_agent_omits_knowledge_tools_when_disabled(

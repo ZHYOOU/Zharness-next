@@ -18,6 +18,16 @@ API Key 和 `LANGSMITH_API_KEY` 始终从环境（`.env`）读取。
 | `model.anthropic_base_url` | 无 | Anthropic 提供商的基础地址覆盖 |
 | `model.mimo_base_url` | `https://api.xiaomimimo.com/v1` | MiMo 提供商的基础地址覆盖 |
 
+## Token 用量
+
+| 键 | 默认值 | 用途 |
+| --- | --- | --- |
+| `token_usage.enabled` | `true` | 收集主 Agent 与子 Agent 模型调用中提供商返回的输入、输出和总 token 数 |
+
+可设置 `ZHARNESS_TOKEN_USAGE_ENABLED=false` 关闭统计 Middleware。启用后，每条
+`AIMessage` 会保留提供商返回的 `usage_metadata`；委派调用的用量会归并到父级委派消息，
+因此对唯一 AI 消息求和即可得到完整的会话用量。
+
 ## 服务与运行时
 
 | 键 | 默认值 | 用途 |

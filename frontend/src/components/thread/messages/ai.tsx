@@ -15,6 +15,7 @@ import { ThreadView } from "../agent-inbox";
 import { useQueryState, parseAsBoolean } from "nuqs";
 import { GenericInterruptView } from "./generic-interrupt";
 import { useArtifact } from "../artifact";
+import { MessageTokenUsage } from "../token-usage";
 
 function CustomComponent({
   message,
@@ -114,6 +115,14 @@ export function AssistantMessage({
     "hideToolCalls",
     parseAsBoolean.withDefault(false),
   );
+  const [showTokenUsage] = useQueryState(
+    "showTokenUsage",
+    parseAsBoolean.withDefault(true),
+  );
+  const [showMessageTokenUsage] = useQueryState(
+    "showMessageTokenUsage",
+    parseAsBoolean.withDefault(true),
+  );
 
   const thread = useStreamContext();
   const isLastMessage =
@@ -185,6 +194,9 @@ export function AssistantMessage({
                 message={message}
                 thread={thread}
               />
+            )}
+            {message && showTokenUsage && showMessageTokenUsage && (
+              <MessageTokenUsage message={message} />
             )}
             <Interrupt
               interrupt={threadInterrupt}

@@ -40,6 +40,7 @@ import {
 import { useFileUpload } from "@/hooks/use-file-upload";
 import { ContentBlocksPreview } from "./ContentBlocksPreview";
 import { KnowledgeBindings } from "./knowledge-bindings";
+import { TokenUsageIndicator } from "./token-usage";
 import {
   useArtifactOpen,
   ArtifactContent,
@@ -124,6 +125,10 @@ export function Thread() {
   const [hideToolCalls, setHideToolCalls] = useQueryState(
     "hideToolCalls",
     parseAsBoolean.withDefault(false),
+  );
+  const [showTokenUsage] = useQueryState(
+    "showTokenUsage",
+    parseAsBoolean.withDefault(true),
   );
   const [input, setInput] = useState("");
   const {
@@ -368,6 +373,7 @@ export function Thread() {
               </div>
 
               <div className="flex items-center gap-4">
+                {showTokenUsage && <TokenUsageIndicator messages={messages} />}
                 <KnowledgeBindings
                   key={threadId}
                   threadId={threadId}

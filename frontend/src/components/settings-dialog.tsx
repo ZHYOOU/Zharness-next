@@ -12,8 +12,10 @@ import {
   Sparkles,
   Wrench,
   X,
+  Coins,
 } from "lucide-react";
 import { useState } from "react";
+import { parseAsBoolean, useQueryState } from "nuqs";
 
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -22,7 +24,8 @@ import { SkillSettings } from "@/components/skill-settings";
 import { MemorySettings } from "@/components/memory-settings";
 import { KnowledgeSettings } from "@/components/knowledge-settings";
 
-type SettingsSection = "memory" | "knowledge" | "tools" | "skills";
+type SettingsSection =
+  "memory" | "knowledge" | "token-usage" | "tools" | "skills";
 
 type SettingsDialogProps = {
   open: boolean;
@@ -32,6 +35,7 @@ type SettingsDialogProps = {
 const sections = [
   { id: "memory", label: "记忆", icon: Brain },
   { id: "knowledge", label: "知识库", icon: Database },
+  { id: "token-usage", label: "Token 用量", icon: Coins },
   { id: "tools", label: "MCP 工具", icon: Wrench },
   { id: "skills", label: "技能", icon: Sparkles },
 ] satisfies Array<{
@@ -153,6 +157,59 @@ function ToolSettings() {
   );
 }
 
+function TokenUsageSettings() {
+  const [showTokenUsage, setShowTokenUsage] = useQueryState(
+    "showTokenUsage",
+    parseAsBoolean.withDefault(true),
+  );
+  const [showMessageTokenUsage, setShowMessageTokenUsage] = useQueryState(
+    "showMessageTokenUsage",
+    parseAsBoolean.withDefault(true),
+  );
+
+  return (
+    <div className="space-y-6">
+      <SectionHeading
+        title="Token 用量"
+        description="控制会话中模型 token 统计信息的显示方式。"
+      />
+      <div className="divide-y rounded-xl border">
+        <div className="flex items-center justify-between gap-4 p-5">
+          <div>
+            <p className="font-medium">显示 Token 用量</p>
+            <p className="text-muted-foreground mt-1 text-sm">
+              在会话顶部显示累计的输入、输出和总 token 数。
+            </p>
+          </div>
+          <Switch
+            aria-label="显示 Token 用量"
+            checked={showTokenUsage}
+            onCheckedChange={setShowTokenUsage}
+          />
+        </div>
+        <div className="flex items-center justify-between gap-4 p-5">
+          <div>
+            <p className="font-medium">显示每步用量</p>
+            <p className="text-muted-foreground mt-1 text-sm">
+              在每次模型调用下方显示该步的 token 明细。
+            </p>
+          </div>
+          <Switch
+            aria-label="显示每步 Token 用量"
+            checked={showMessageTokenUsage}
+            disabled={!showTokenUsage}
+            onCheckedChange={setShowMessageTokenUsage}
+          />
+        </div>
+      </div>
+      <p className="text-muted-foreground text-xs leading-5">
+        只有模型提供商返回 usage_metadata 时才会产生统计数据。子 Agent
+        用量已计入发起委派的模型步骤。
+      </p>
+    </div>
+  );
+}
+
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const [activeSection, setActiveSection] = useState<SettingsSection>("memory");
 
@@ -213,6 +270,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border p-5 sm:p-7">
               {activeSection === "memory" && <MemorySettings />}
               {activeSection === "knowledge" && <KnowledgeSettings />}
+              {activeSection === "token-usage" && <TokenUsageSettings />}
               {activeSection === "tools" && <ToolSettings />}
               {activeSection === "skills" && <SkillSettings />}
             </div>
