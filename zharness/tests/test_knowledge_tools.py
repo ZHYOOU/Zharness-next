@@ -81,5 +81,9 @@ async def test_tool_fails_closed_without_thread_identity(monkeypatch) -> None:
         await knowledge_search.coroutine("query", runtime=_runtime(None))
     )
 
-    assert result == {"error": "server thread identity is unavailable"}
+    assert result == {
+        "error": "server thread identity is unavailable",
+        "error_code": "invalid_context",
+        "retryable": False,
+    }
     assert service.calls == []

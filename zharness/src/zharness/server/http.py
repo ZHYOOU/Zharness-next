@@ -37,6 +37,8 @@ async def _sandbox_cleanup_loop(manager: Any, stop: asyncio.Event) -> None:
                 logger.info("Pruned %d sandbox containers", len(removed))
         except SandboxUnavailableError:
             logger.exception("Failed to prune sandbox containers")
+        except Exception:
+            logger.exception("Unexpected sandbox cleanup failure")
 
         try:
             await asyncio.wait_for(stop.wait(), timeout=interval)
@@ -80,7 +82,7 @@ class ThreadSandboxCleanupMiddleware:
                 if get_settings().knowledge.enabled:
                     try:
                         await get_knowledge_service().delete_thread(thread_id)
-                    except KnowledgeUnavailableError:
+                    except (KnowledgeUnavailableError, RuntimeError):
                         logger.exception(
                             "Failed to remove knowledge for deleted thread %s",
                             thread_id,
@@ -96,7 +98,12 @@ async def lifespan(_: Starlette) -> AsyncIterator[None]:
 
     manager = get_sandbox_manager()
     if get_settings().knowledge.enabled:
-        await get_knowledge_service().initialize()
+        try:
+            await get_knowledge_service().initialize()
+        except (KnowledgeUnavailableError, RuntimeError):
+            logger.exception(
+                "Knowledge initialization failed; continuing without knowledge"
+            )
     cleanup_stop = asyncio.Event()
     cleanup_task = None
     if callable(getattr(manager, "prune", None)):
@@ -114,9 +121,12 @@ async def lifespan(_: Starlette) -> AsyncIterator[None]:
                 "Removed or stopped %d sandbox instances during shutdown",
                 len(removed),
             )
-        except SandboxUnavailableError:
+        except Exception:
             logger.exception("Failed to shut down sandbox instances")
-        await close_knowledge_service()
+        try:
+            await close_knowledge_service()
+        except Exception:
+            logger.exception("Failed to close knowledge service")
 
 
 app = Starlette(

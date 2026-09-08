@@ -1,7 +1,9 @@
 """Skill management HTTP endpoints. / 技能管理 HTTP 接口。"""
 
 import json
+import logging
 from dataclasses import replace
+from pathlib import Path
 from threading import Lock
 
 import yaml
@@ -17,6 +19,7 @@ from zharness.skills.types import Skill, SkillCategory
 from zharness.skills.validation import validate_skill_name
 
 _mutation_lock = Lock()
+logger = logging.getLogger(__name__)
 
 
 class SkillInput(BaseModel):
@@ -83,13 +86,12 @@ def handle_skills(method: str, name: str | None, data: dict) -> JSONResponse:
             )
             try:
                 file.write_text(markdown, encoding="utf-8")
-            except OSError:
-                file.unlink(missing_ok=True)
-                directory.rmdir()
+                skill = parse_skill_file(file, SkillCategory.USER)
+                if skill is None:
+                    raise ValueError("技能内容无法解析。")
+            except (OSError, ValueError):
+                _rollback_skill_creation(file, directory)
                 raise
-            skill = parse_skill_file(file, SkillCategory.USER)
-            if skill is None:
-                raise ValueError("技能内容无法解析。")
             return JSONResponse(
                 serialize_skill(
                     replace(skill, enabled=SkillState().is_enabled(normalized))
@@ -116,6 +118,21 @@ def handle_skills(method: str, name: str | None, data: dict) -> JSONResponse:
                 "content": skill.skill_file.read_text(encoding="utf-8"),
             }
         )
+
+
+def _rollback_skill_creation(file: Path, directory: Path) -> None:
+    """Remove a partially created skill without masking its original error.
+
+    删除部分创建的技能，同时不掩盖原始错误。
+    """
+    for path, operation in (
+        (file, lambda: file.unlink(missing_ok=True)),
+        (directory, directory.rmdir),
+    ):
+        try:
+            operation()
+        except OSError:
+            logger.exception("Failed to roll back partial skill path %s", path)
 
 
 async def skills_endpoint(request: Request) -> JSONResponse:

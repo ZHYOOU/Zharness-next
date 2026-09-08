@@ -136,5 +136,9 @@ async def test_tools_never_raise_on_unavailable_service(monkeypatch) -> None:
         await memory_add.coroutine("anything", runtime=runtime_for("t1"))
     )
 
-    assert "error" in result
-    assert "db down" in result["error"]
+    assert result == {
+        "error": "Long-term memory is temporarily unavailable.",
+        "error_code": "unavailable",
+        "retryable": True,
+    }
+    assert "db down" not in result["error"]

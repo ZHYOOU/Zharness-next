@@ -238,4 +238,50 @@ def test_lead_agent_surfaces_persistent_tool_errors(monkeypatch) -> None:
         message for message in result["messages"] if isinstance(message, ToolMessage)
     ]
     assert tool_messages[-1].status == "error"
-    assert "RuntimeError" in str(tool_messages[-1].content)
+    assert "failed unexpectedly" in str(tool_messages[-1].content)
+    assert "transient failure" not in str(tool_messages[-1].content)
+
+
+def test_lead_agent_does_not_retry_mutating_tool_errors(monkeypatch) -> None:
+    """Do not repeat a write whose outcome may already have side effects. / 不重复可能已经产生副作用的写入。"""
+    attempts: list[int] = []
+
+    def fail_write(path, content):
+        attempts.append(1)
+        raise RuntimeError("uncertain failure after a write attempt")
+
+    manager = SimpleNamespace(
+        for_thread=lambda thread_id: SimpleNamespace(write=fail_write)
+    )
+    monkeypatch.setattr(workspace_module, "get_sandbox_manager", lambda: manager)
+    model = ToolCallingFakeModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "write_file",
+                        "args": {
+                            "path": "/workspace/result.txt",
+                            "content": "data",
+                        },
+                        "id": "call-write",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            AIMessage(content="Write failed."),
+        ]
+    )
+    agent = create_lead_agent(model)
+
+    result = agent.invoke(
+        {"messages": [{"role": "user", "content": "Write the file."}]},
+        {"configurable": {"thread_id": "write-error-thread"}},
+    )
+
+    assert attempts == [1]
+    tool_messages = [
+        message for message in result["messages"] if isinstance(message, ToolMessage)
+    ]
+    assert tool_messages[-1].status == "error"

@@ -80,8 +80,11 @@ Agent 同时启用了：
   消息在本地派生标题；设置 `title.model_name` 可使用专用模型生成。
 - `HumanInTheLoopMiddleware`：为 `execute_command` 提供每次运行可选的
   `allow_all` 和 `require_approval` 策略，默认为 `allow_all`。
-- `ToolErrorMiddleware`：将工具失败格式化为可供模型修复并重试的信息。
-- `ToolRetryMiddleware`：对失败的工具调用最多重试 3 次，并带有受限的退避。
+- `ToolErrorMiddleware`：记录内部异常，并向模型返回不含敏感细节的失败信息。
+- `ToolRetryMiddleware`：仅以有界退避方式最多重试只读工具 3 次；带副作用操作不参与重试。
+
+预期内的工具失败使用包含 `error`、`error_code` 和 `retryable` 字段的 JSON，
+调用方可以据此区分无效输入和临时不可用。
 
 ## 配置
 

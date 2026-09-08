@@ -114,8 +114,16 @@ class MemoryService:
             raise MemoryUnavailableError(str(exc)) from exc
         if not added:
             return {"error": "Duplicate fact"}
-        await self._enforce_capacity()
-        return {"id": fact.id, "status": "added"}
+        capacity_enforced = await self._enforce_capacity()
+        result = {"id": fact.id, "status": "added"}
+        if not capacity_enforced:
+            result.update(
+                {
+                    "warning": "Memory capacity enforcement failed",
+                    "warning_code": "capacity_enforcement_failed",
+                }
+            )
+        return result
 
     async def update_fact(
         self,
@@ -322,7 +330,7 @@ class MemoryService:
             logger.exception("Failed to persist memory profile")
             raise MemoryUnavailableError(str(exc)) from exc
 
-    async def _enforce_capacity(self) -> None:
+    async def _enforce_capacity(self) -> bool:
         """Evict the lowest-scoring facts when the collection exceeds ``max_facts``.
 
         当集合超出 ``max_facts`` 时驱逐评分最低的事实。
@@ -330,7 +338,7 @@ class MemoryService:
         try:
             count = await self._repository.count_facts()
             if count <= self._max_facts:
-                return
+                return True
             facts = await self._repository.all_facts()
             for score, fact in select_for_eviction(facts, self._max_facts):
                 await self._repository.delete_fact(fact.id)
@@ -338,6 +346,8 @@ class MemoryService:
             await self._repository.prune_evictions()
         except Exception:
             logger.exception("Failed to enforce memory capacity")
+            return False
+        return True
 
 
 _MEMORY_SERVICE: MemoryService | None = None

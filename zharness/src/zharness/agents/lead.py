@@ -51,6 +51,19 @@ APPROVAL_STRATEGY_KEY = "approval_strategy"
 APPROVAL_STRATEGY_ALLOW_ALL = "allow_all"
 APPROVAL_STRATEGY_REQUIRE_APPROVAL = "require_approval"
 
+SAFE_RETRY_TOOL_NAMES = (
+    "describe_skill",
+    "glob_files",
+    "grep_files",
+    "knowledge_list",
+    "knowledge_search",
+    "list_workspace",
+    "memory_search",
+    "read_file",
+    "web_search",
+)
+"""Read-only tools that may be retried after unexpected failures. / 发生意外故障后可重试的只读工具。"""
+
 DEFAULT_SUMMARIZATION_TRIGGER_TOKENS = 4_000
 DEFAULT_SUMMARIZATION_KEEP_MESSAGES = 8
 MIMO_V2_5_CONTEXT_TOKENS = 1_048_576
@@ -91,9 +104,16 @@ def _requires_execute_approval(request: ToolCallRequest) -> bool:
 
 def _format_tool_error(exc: Exception, request) -> str | None:
     """Format a tool-execution error for the model to fix and retry. / 将工具执行错误格式化为可供模型修复并重试的信息。"""
+    tool_name = request.tool_call["name"]
+    logging.getLogger(__name__).error(
+        "Unhandled tool failure for %s",
+        tool_name,
+        exc_info=(type(exc), exc, exc.__traceback__),
+    )
     return (
-        f"`{request.tool_call['name']}` failed with {type(exc).__name__}: {exc}. "
-        "Fix the input and retry, or explain the limitation to the user."
+        f"`{tool_name}` failed unexpectedly. Internal details were logged. "
+        "Do not repeat a side-effecting operation automatically; use a safe "
+        "alternative or explain the limitation to the user."
     )
 
 
@@ -380,6 +400,7 @@ def create_lead_agent(
             ),
             ToolRetryMiddleware(
                 max_retries=3,
+                tools=list(SAFE_RETRY_TOOL_NAMES),
                 on_failure="error",
                 initial_delay=0.1,
                 backoff_factor=2.0,

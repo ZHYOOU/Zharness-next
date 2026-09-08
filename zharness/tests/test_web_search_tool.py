@@ -1,3 +1,5 @@
+import json
+
 from ddgs.exceptions import RatelimitException
 from zharness.tools import web_search as web_search_module
 from zharness.tools.constants import NETWORK_REQUEST_TIMEOUT_SECONDS
@@ -106,20 +108,21 @@ def test_web_search_surfaces_rate_limit_errors(monkeypatch) -> None:
 
     result = web_search.func("example")
 
-    assert isinstance(result, str)
-    assert result.startswith("Error: DuckDuckGo request failed:")
+    assert json.loads(result) == {
+        "error": "Web search is temporarily unavailable.",
+        "error_code": "unavailable",
+        "retryable": True,
+    }
 
 
 def test_web_search_validates_inputs() -> None:
-    assert web_search.func("") == "Error: query must not be empty"
-    assert web_search.func("   ") == "Error: query must not be empty"
-    assert web_search.func("x" * 513) == ("Error: query must be at most 512 characters")
-    assert web_search.func("ok", max_results=0) == (
-        "Error: max_results must be between 1 and 10"
-    )
-    assert web_search.func("ok", max_results=11) == (
-        "Error: max_results must be between 1 and 10"
-    )
-    assert web_search.func("ok", max_results=True) == (
-        "Error: max_results must be between 1 and 10"
-    )
+    results = [
+        json.loads(web_search.func("")),
+        json.loads(web_search.func("   ")),
+        json.loads(web_search.func("x" * 513)),
+        json.loads(web_search.func("ok", max_results=0)),
+        json.loads(web_search.func("ok", max_results=11)),
+        json.loads(web_search.func("ok", max_results=True)),
+    ]
+    assert all(result["error_code"] == "invalid_request" for result in results)
+    assert all(result["retryable"] is False for result in results)

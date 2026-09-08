@@ -5,6 +5,7 @@ from langchain.tools import ToolRuntime, tool
 from zharness.host.paths import WorkspacePathError
 from zharness.sandbox.manager import SandboxUnavailableError, get_sandbox_manager
 from zharness.sandbox.workspace import SandboxWorkspace, SandboxWorkspaceError
+from zharness.tools.errors import ToolErrorCode, serialize_tool_error
 
 MAX_COMMAND_CHARS = 128 * 1024
 MAX_TIMEOUT_SECONDS = 300
@@ -33,11 +34,20 @@ def execute_command(
     execution_info = runtime.execution_info
     thread_id = execution_info.thread_id if execution_info is not None else None
     if thread_id is None:
-        return "Error: Server thread identity is unavailable"
+        return serialize_tool_error(
+            ToolErrorCode.INVALID_CONTEXT,
+            "Server thread identity is unavailable",
+        )
     if not command or len(command) > MAX_COMMAND_CHARS:
-        return f"Error: command must contain 1-{MAX_COMMAND_CHARS} characters"
+        return serialize_tool_error(
+            ToolErrorCode.INVALID_REQUEST,
+            f"command must contain 1-{MAX_COMMAND_CHARS} characters",
+        )
     if isinstance(timeout, bool) or not 1 <= timeout <= MAX_TIMEOUT_SECONDS:
-        return f"Error: timeout must be between 1 and {MAX_TIMEOUT_SECONDS} seconds"
+        return serialize_tool_error(
+            ToolErrorCode.INVALID_REQUEST,
+            f"timeout must be between 1 and {MAX_TIMEOUT_SECONDS} seconds",
+        )
     try:
         backend_cwd = SandboxWorkspace.command_cwd(cwd)
         result = (
@@ -49,12 +59,14 @@ def execute_command(
                 cwd=backend_cwd,
             )
         )
-    except (
-        SandboxUnavailableError,
-        SandboxWorkspaceError,
-        WorkspacePathError,
-    ) as exc:
-        return f"Error: {exc}"
+    except SandboxUnavailableError:
+        return serialize_tool_error(
+            ToolErrorCode.UNAVAILABLE,
+            "Command execution is temporarily unavailable.",
+            retryable=True,
+        )
+    except (SandboxWorkspaceError, WorkspacePathError) as exc:
+        return serialize_tool_error(ToolErrorCode.INVALID_REQUEST, str(exc))
 
     output = result.output or "(no output)"
     suffix = f"\n[exit_code={result.exit_code}]"

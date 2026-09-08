@@ -60,6 +60,30 @@ async def test_create_read_toggle_and_duplicate(storage):
 
 
 @pytest.mark.asyncio
+async def test_create_rolls_back_when_written_skill_cannot_be_parsed(
+    storage, monkeypatch
+) -> None:
+    """Remove files created before final skill validation fails. / 最终技能校验失败时删除此前创建的文件。"""
+    monkeypatch.setattr(skills, "parse_skill_file", lambda *_: None)
+
+    transport = ASGITransport(app=Starlette(routes=skills.routes))
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/skills",
+            json={
+                "name": "invalid-after-write",
+                "description": "Valid metadata",
+                "content": "Content rejected by the final parser",
+            },
+        )
+
+    assert response.status_code == 422
+    assert not (
+        storage.get_skills_root_path() / "user" / "invalid-after-write"
+    ).exists()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "patch",
     [

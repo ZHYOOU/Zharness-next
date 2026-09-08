@@ -70,11 +70,11 @@ async def knowledge_endpoint(request: Request) -> JSONResponse:
     """Manage reusable knowledge bases, documents and thread bindings. / 管理可复用知识库、文档与会话绑定。"""
     if not get_settings().knowledge.enabled:
         return JSONResponse({"error": "后端尚未启用知识库功能。"}, status_code=503)
-    service = get_knowledge_service()
     base_id = request.path_params.get("base_id")
     document_id = request.path_params.get("document_id")
     thread_id = request.path_params.get("thread_id")
     try:
+        service = get_knowledge_service()
         if thread_id is not None:
             if not _THREAD_PATTERN.fullmatch(thread_id):
                 return JSONResponse({"error": "会话标识无效。"}, status_code=422)
@@ -122,7 +122,7 @@ async def knowledge_endpoint(request: Request) -> JSONResponse:
         )
     except (ValidationError, json.JSONDecodeError, UnicodeDecodeError):
         return JSONResponse({"error": "请求中的知识库数据无效。"}, status_code=422)
-    except KnowledgeUnavailableError:
+    except (KnowledgeUnavailableError, RuntimeError):
         return JSONResponse(
             {"error": "知识库服务暂时不可用，请检查数据库和嵌入模型配置。"},
             status_code=503,

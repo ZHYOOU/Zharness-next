@@ -9,6 +9,11 @@ Examples:
     uv run --package zharness python scripts/cleanup.py --dry-run
     uv run --package zharness python scripts/cleanup.py -y
     uv run --package zharness python scripts/cleanup.py --caches --remove-image
+
+删除 ZHarness Next 运行时数据，包括 LangGraph 检查点、线程工作区、项目创建的
+线程级 Docker 沙箱容器，以及可选的 Python、lint 缓存和沙箱镜像。服务停止时
+可安全执行；服务会按需重新创建相关数据。上方示例展示了预览、确认删除及扩展
+清理方式。
 """
 
 from __future__ import annotations

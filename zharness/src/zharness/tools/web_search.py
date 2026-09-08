@@ -11,6 +11,7 @@ DuckDuckGo 的反爬虫挑战——否则被标记或数据中心 IP 收到的�
 
 from __future__ import annotations
 
+import logging
 from typing import NotRequired
 
 from ddgs import DDGS
@@ -19,10 +20,12 @@ from langchain.tools import tool
 from typing_extensions import TypedDict
 
 from zharness.tools.constants import NETWORK_REQUEST_TIMEOUT_SECONDS
+from zharness.tools.errors import ToolErrorCode, serialize_tool_error
 
 MAX_QUERY_CHARS = 512
 MAX_RESULTS = 10
 DEFAULT_MAX_RESULTS = 5
+logger = logging.getLogger(__name__)
 
 
 class WebSearchResult(TypedDict):
@@ -74,16 +77,30 @@ def web_search(
     """
     query = query.strip()
     if not query:
-        return "Error: query must not be empty"
+        return serialize_tool_error(
+            ToolErrorCode.INVALID_REQUEST,
+            "query must not be empty",
+        )
     if len(query) > MAX_QUERY_CHARS:
-        return f"Error: query must be at most {MAX_QUERY_CHARS} characters"
+        return serialize_tool_error(
+            ToolErrorCode.INVALID_REQUEST,
+            f"query must be at most {MAX_QUERY_CHARS} characters",
+        )
     if isinstance(max_results, bool) or not 1 <= max_results <= MAX_RESULTS:
-        return f"Error: max_results must be between 1 and {MAX_RESULTS}"
+        return serialize_tool_error(
+            ToolErrorCode.INVALID_REQUEST,
+            f"max_results must be between 1 and {MAX_RESULTS}",
+        )
 
     try:
         results = _search_duckduckgo(query, max_results)
-    except DDGSException as exc:
-        return f"Error: DuckDuckGo request failed: {exc}"
+    except DDGSException:
+        logger.warning("DuckDuckGo request failed", exc_info=True)
+        return serialize_tool_error(
+            ToolErrorCode.UNAVAILABLE,
+            "Web search is temporarily unavailable.",
+            retryable=True,
+        )
 
     if not results:
         return "No results found. Try a different, more specific query."

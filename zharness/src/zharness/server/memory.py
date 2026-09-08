@@ -67,7 +67,7 @@ async def memory_endpoint(request: Request) -> JSONResponse:
         return JSONResponse(
             result, status_code=201 if request.method == "POST" else 200
         )
-    except MemoryUnavailableError:
+    except (MemoryUnavailableError, RuntimeError):
         return JSONResponse(
             {"error": "记忆存储暂时不可用，请检查后端数据库连接。"}, status_code=503
         )

@@ -84,10 +84,13 @@ The agent also enables:
 - `HumanInTheLoopMiddleware`, which supports per-run `allow_all` and
   `require_approval` strategies for `execute_command`; `allow_all` is the
   default.
-- `ToolErrorMiddleware`, which formats tool failures for the model to fix and
-  retry.
-- `ToolRetryMiddleware`, which retries failed tool calls up to three times with
-  bounded backoff.
+- `ToolErrorMiddleware`, which logs internal exceptions and gives the model a
+  non-sensitive failure message.
+- `ToolRetryMiddleware`, which retries only read-only tools up to three times
+  with bounded backoff. Side-effecting operations are excluded.
+
+Expected tool failures use JSON with `error`, `error_code`, and `retryable`
+fields so callers can distinguish invalid input from temporary unavailability.
 
 ## Configuration
 

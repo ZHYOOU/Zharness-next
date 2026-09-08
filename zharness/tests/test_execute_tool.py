@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 from typing import cast
 
@@ -41,14 +42,20 @@ def test_execute_command_uses_thread_sandbox(monkeypatch) -> None:
 
 
 def test_execute_command_validates_runtime_and_timeout() -> None:
-    assert execute_command.func("pwd", runtime=runtime_for(None)) == (
-        "Error: Server thread identity is unavailable"
+    missing_context = json.loads(execute_command.func("pwd", runtime=runtime_for(None)))
+    invalid_timeout = json.loads(
+        execute_command.func("pwd", timeout=0, runtime=runtime_for("t1"))
     )
-    assert execute_command.func("pwd", timeout=0, runtime=runtime_for("t1")) == (
-        "Error: timeout must be between 1 and 300 seconds"
+    invalid_path = json.loads(
+        execute_command.func("pwd", cwd="../outside", runtime=runtime_for("t1"))
     )
-    assert execute_command.func("pwd", cwd="../outside", runtime=runtime_for("t1")) == (
-        "Error: Path traversal is not allowed"
+
+    assert missing_context["error_code"] == "invalid_context"
+    assert invalid_timeout["error_code"] == "invalid_request"
+    assert invalid_path["error_code"] == "invalid_request"
+    assert all(
+        result["retryable"] is False
+        for result in (missing_context, invalid_timeout, invalid_path)
     )
 
 
@@ -86,5 +93,9 @@ def test_execute_command_rejects_cwd_outside_public_workspace(monkeypatch) -> No
 
     result = execute_command.func("pwd", cwd="/reports", runtime=runtime_for("t1"))
 
-    assert result == "Error: Path must be under /workspace"
+    assert json.loads(result) == {
+        "error": "Path must be under /workspace",
+        "error_code": "invalid_request",
+        "retryable": False,
+    }
     assert calls == []

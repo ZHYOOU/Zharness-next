@@ -431,7 +431,12 @@ class KnowledgeService:
                     "Failed to record knowledge indexing failure for %s",
                     source_uri,
                 )
-            return {"source_uri": source_uri, "status": "error", "error": str(exc)}
+            return {
+                "source_uri": source_uri,
+                "status": "error",
+                "error": "Failed to index knowledge source",
+                "error_code": "indexing_failed",
+            }
         return _document_outcome(record.id, source_uri, "indexed", len(chunks))
 
     async def _ensure_repository_ready(self) -> None:

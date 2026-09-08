@@ -234,6 +234,43 @@ async def test_lifespan_initializes_and_closes_knowledge(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_lifespan_degrades_when_knowledge_initialization_fails(
+    monkeypatch,
+) -> None:
+    """Keep the core server available when optional knowledge fails. / 可选知识库失败时保持核心服务可用。"""
+    manager = FakeManager()
+    events: list[str] = []
+
+    class FakeKnowledgeService:
+        async def initialize(self) -> None:
+            events.append("initialize")
+            raise http_module.KnowledgeUnavailableError("embedding offline")
+
+    settings = SimpleNamespace(knowledge=SimpleNamespace(enabled=True))
+    monkeypatch.setattr(http_module, "get_settings", lambda: settings)
+    monkeypatch.setattr(http_module, "get_sandbox_manager", lambda: manager)
+    monkeypatch.setattr(
+        http_module,
+        "get_knowledge_service",
+        lambda: FakeKnowledgeService(),
+    )
+
+    async def close_service() -> None:
+        events.append("close")
+
+    async def run_immediately(function, *args):
+        return function(*args)
+
+    monkeypatch.setattr(http_module, "close_knowledge_service", close_service)
+    monkeypatch.setattr(http_module.asyncio, "to_thread", run_immediately)
+
+    async with lifespan(http_module.app):
+        events.append("running")
+
+    assert events == ["initialize", "running", "close"]
+
+
+@pytest.mark.asyncio
 async def test_lifespan_runs_immediate_background_cleanup(monkeypatch) -> None:
     class PruningManager(FakeManager):
         settings = SimpleNamespace(cleanup_interval_seconds=3600)

@@ -4,6 +4,7 @@ from zharness.host.paths import WorkspacePathError
 from zharness.sandbox.manager import SandboxUnavailableError, get_sandbox_manager
 from zharness.sandbox.protocol import FileInfo, GrepMatch
 from zharness.sandbox.workspace import SandboxWorkspace, SandboxWorkspaceError
+from zharness.tools.errors import ToolErrorCode, serialize_tool_error
 
 
 def _runtime_workspace(runtime: ToolRuntime) -> SandboxWorkspace:
@@ -34,7 +35,7 @@ def list_workspace(
     try:
         return _runtime_workspace(runtime).ls(path)
     except _WORKSPACE_ERRORS as exc:
-        return f"Error: {exc}"
+        return _workspace_error(exc)
 
 
 @tool
@@ -50,7 +51,7 @@ def read_file(
     try:
         return _runtime_workspace(runtime).read(path, offset=offset, limit=limit)
     except (*_WORKSPACE_ERRORS, ValueError) as exc:
-        return f"Error: {exc}"
+        return _workspace_error(exc)
 
 
 @tool
@@ -66,7 +67,7 @@ def write_file(
         written_path = _runtime_workspace(runtime).write(path, content)
         return f"Wrote {len(content.encode('utf-8'))} bytes to {written_path}"
     except _WORKSPACE_ERRORS as exc:
-        return f"Error: {exc}"
+        return _workspace_error(exc)
 
 
 @tool
@@ -90,7 +91,7 @@ def edit_file(
         )
         return f"Replaced {count} occurrence(s) in {workspace.canonical_path(path)}"
     except _WORKSPACE_ERRORS as exc:
-        return f"Error: {exc}"
+        return _workspace_error(exc)
 
 
 @tool
@@ -105,7 +106,7 @@ def delete_path(
         deleted_path = _runtime_workspace(runtime).delete(path)
         return f"Deleted {deleted_path}"
     except _WORKSPACE_ERRORS as exc:
-        return f"Error: {exc}"
+        return _workspace_error(exc)
 
 
 @tool
@@ -120,7 +121,7 @@ def glob_files(
     try:
         return _runtime_workspace(runtime).glob(pattern, path=path)
     except _WORKSPACE_ERRORS as exc:
-        return f"Error: {exc}"
+        return _workspace_error(exc)
 
 
 @tool
@@ -136,4 +137,24 @@ def grep_files(
     try:
         return _runtime_workspace(runtime).grep(pattern, path=path, include=include)
     except _WORKSPACE_ERRORS as exc:
-        return f"Error: {exc}"
+        return _workspace_error(exc)
+
+
+def _workspace_error(exc: Exception) -> str:
+    """Map workspace failures to stable, non-sensitive tool errors.
+
+    将工作区失败映射为稳定且不含敏感信息的工具错误。
+    """
+    if isinstance(exc, SandboxUnavailableError):
+        return serialize_tool_error(
+            ToolErrorCode.UNAVAILABLE,
+            "The workspace sandbox is temporarily unavailable.",
+            retryable=True,
+        )
+    if isinstance(exc, WorkspacePathError) and str(exc) == (
+        "Server thread identity is unavailable"
+    ):
+        return serialize_tool_error(ToolErrorCode.INVALID_CONTEXT, str(exc))
+    if isinstance(exc, (SandboxWorkspaceError, WorkspacePathError, ValueError)):
+        return serialize_tool_error(ToolErrorCode.INVALID_REQUEST, str(exc))
+    return serialize_tool_error(ToolErrorCode.OPERATION_FAILED, str(exc))

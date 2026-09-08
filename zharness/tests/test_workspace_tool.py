@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -207,7 +208,11 @@ def test_edit_tool_rejects_legacy_path(monkeypatch) -> None:
         runtime=runtime_for("thread-one"),
     )
 
-    assert result == "Error: Path must be under /workspace"
+    assert json.loads(result) == {
+        "error": "Path must be under /workspace",
+        "error_code": "invalid_request",
+        "retryable": False,
+    }
     assert sandbox.calls == []
 
 
@@ -216,12 +221,12 @@ def test_tool_errors_are_recoverable_and_root_delete_is_blocked(monkeypatch) -> 
     install_manager(monkeypatch, sandbox)
     runtime = runtime_for("thread-one")
 
-    assert read_file.func("../missing.txt", runtime=runtime) == (
-        "Error: Path traversal is not allowed"
-    )
-    assert delete_path.func("/workspace", runtime=runtime) == (
-        "Error: Cannot delete the workspace root"
-    )
+    read_error = json.loads(read_file.func("../missing.txt", runtime=runtime))
+    delete_error = json.loads(delete_path.func("/workspace", runtime=runtime))
+    assert read_error["error"] == "Path traversal is not allowed"
+    assert read_error["error_code"] == "invalid_request"
+    assert delete_error["error"] == "Cannot delete the workspace root"
+    assert delete_error["error_code"] == "invalid_request"
     assert sandbox.calls == []
 
 
@@ -252,15 +257,16 @@ def test_tools_fail_closed_without_server_thread_identity(monkeypatch) -> None:
     missing_thread = runtime_for(None)
 
     for runtime in [missing_execution, missing_thread]:
-        assert list_workspace.func(runtime=runtime) == (
-            "Error: Server thread identity is unavailable"
-        )
-        assert read_file.func("hello.txt", runtime=runtime) == (
-            "Error: Server thread identity is unavailable"
-        )
-        assert write_file.func("hello.txt", "hello", runtime=runtime) == (
-            "Error: Server thread identity is unavailable"
-        )
+        for result in (
+            list_workspace.func(runtime=runtime),
+            read_file.func("hello.txt", runtime=runtime),
+            write_file.func("hello.txt", "hello", runtime=runtime),
+        ):
+            assert json.loads(result) == {
+                "error": "Server thread identity is unavailable",
+                "error_code": "invalid_context",
+                "retryable": False,
+            }
     assert thread_ids == []
 
 

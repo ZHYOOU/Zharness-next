@@ -316,6 +316,30 @@ async def test_add_fact_enforces_capacity() -> None:
 
 
 @pytest.mark.asyncio
+async def test_add_fact_reports_capacity_enforcement_failure() -> None:
+    """Report degraded capacity enforcement without denying a completed write.
+
+    报告容量执行降级，同时不否认已完成的写入。
+    """
+
+    class BrokenCapacityRepository(FakeMemoryRepository):
+        async def count_facts(self) -> int:
+            raise RuntimeError("count failed")
+
+    repo = BrokenCapacityRepository()
+    service = _service(repo)
+
+    result = await service.add_fact("stored before capacity check")
+
+    assert result == {
+        "id": next(iter(repo.facts)),
+        "status": "added",
+        "warning": "Memory capacity enforcement failed",
+        "warning_code": "capacity_enforcement_failed",
+    }
+
+
+@pytest.mark.asyncio
 async def test_service_fails_open_on_storage_errors() -> None:
     class BrokenRepository(FakeMemoryRepository):
         async def setup(self) -> None:

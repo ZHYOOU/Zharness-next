@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 from langchain.tools import ToolRuntime, tool
@@ -11,6 +12,10 @@ from zharness.knowledge.service import (
     KnowledgeUnavailableError,
     get_knowledge_service,
 )
+from zharness.tools.errors import ToolErrorCode, serialize_tool_error
+
+_UNAVAILABLE_MESSAGE = "Knowledge storage or embedding is temporarily unavailable."
+logger = logging.getLogger(__name__)
 
 
 @tool
@@ -32,7 +37,7 @@ async def knowledge_search(
         )
     except (KnowledgeUnavailableError, RuntimeError, ValueError) as exc:
         return _error(exc)
-    return _dumps(result)
+    return _serialize_result(result)
 
 
 @tool
@@ -54,7 +59,7 @@ async def knowledge_ingest(
         )
     except (KnowledgeUnavailableError, RuntimeError, ValueError) as exc:
         return _error(exc)
-    return _dumps(result)
+    return _serialize_result(result)
 
 
 @tool
@@ -67,7 +72,7 @@ async def knowledge_list(*, runtime: ToolRuntime) -> str:
         result = await get_knowledge_service().list_documents(_thread_id(runtime))
     except (KnowledgeUnavailableError, RuntimeError, ValueError) as exc:
         return _error(exc)
-    return _dumps(result)
+    return _serialize_result(result)
 
 
 @tool
@@ -87,7 +92,7 @@ async def knowledge_delete(
         )
     except (KnowledgeUnavailableError, RuntimeError, ValueError) as exc:
         return _error(exc)
-    return _dumps(result)
+    return _serialize_result(result)
 
 
 def _thread_id(runtime: ToolRuntime) -> str:
@@ -101,9 +106,40 @@ def _thread_id(runtime: ToolRuntime) -> str:
 
 def _error(exc: Exception) -> str:
     """Serialize an operational tool error. / 序列化工具运行错误。"""
-    return _dumps({"error": str(exc)})
+    if isinstance(exc, ValueError):
+        code = (
+            ToolErrorCode.INVALID_CONTEXT
+            if str(exc) == "server thread identity is unavailable"
+            else ToolErrorCode.INVALID_REQUEST
+        )
+        return serialize_tool_error(
+            code,
+            str(exc),
+        )
+    logger.warning(
+        "Knowledge tool is unavailable",
+        exc_info=(type(exc), exc, exc.__traceback__),
+    )
+    return serialize_tool_error(
+        ToolErrorCode.UNAVAILABLE,
+        _UNAVAILABLE_MESSAGE,
+        retryable=True,
+    )
 
 
 def _dumps(value: dict[str, Any]) -> str:
     """Serialize a result as compact Unicode JSON. / 将结果序列化为紧凑的 Unicode JSON。"""
     return json.dumps(value, ensure_ascii=False)
+
+
+def _serialize_result(result: dict[str, Any]) -> str:
+    """Add stable metadata to top-level knowledge errors. / 为知识库顶层错误添加稳定元数据。"""
+    error = result.get("error")
+    if not isinstance(error, str):
+        return _dumps(result)
+    code = (
+        ToolErrorCode.NOT_FOUND
+        if "not found" in error.lower()
+        else ToolErrorCode.INVALID_REQUEST
+    )
+    return serialize_tool_error(code, error)

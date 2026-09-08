@@ -31,8 +31,9 @@ future gateway layer.
 - Skill discovery: bundled `SKILL.md` packages are exposed through a read-only
   `/mnt/skills` mount and a deferred `describe_skill` tool that keeps the
   system prompt compact.
-- Tool failures are formatted for the model and retried automatically before a
-  run gives up.
+- Tool failures use stable error codes without exposing internal exception
+  details. Only read-only tools are retried automatically; side-effecting file,
+  command, knowledge, and memory writes are never repeated by retry middleware.
 - PostgreSQL-backed checkpoint persistence with an idempotent setup and a
   managed Compose service for local development.
 - Todo-based planning for multi-step tasks and automatic summarization of long
