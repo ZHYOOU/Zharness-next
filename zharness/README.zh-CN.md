@@ -19,7 +19,7 @@ src/zharness/
 │   └── paths.py             # 数据 home 与线程工作区路径解析
 ├── knowledge/               # 线程级 RAG 导入与检索
 ├── memory/                  # 长期记忆：抽取、闸门、评分与工具
-├── middleware/              # Todo、标题、子 Agent 与日期中间件
+├── middleware/              # 日期、子 Agent、标题与 Token 用量中间件
 ├── models/
 │   └── factory.py           # Chat Model 工厂
 ├── sandbox/
@@ -31,20 +31,28 @@ src/zharness/
 │   └── workspace.py         # 共享的 /workspace 路径契约与校验
 ├── server/
 │   ├── checkpointer.py      # PostgreSQL 检查点生命周期
+│   ├── database.py          # 数据库连接生命周期
 │   ├── graph.py             # LangGraph 图入口
 │   ├── http.py              # 沙箱清理中间件和服务生命周期
-│   └── memory.py            # 记忆管理 HTTP 接口
+│   ├── knowledge.py         # 知识库管理 HTTP 接口
+│   ├── memory.py            # 记忆管理 HTTP 接口
+│   └── skills.py            # 技能管理 HTTP 接口
 ├── skills/
 │   ├── catalog.py           # 不可变技能目录与延迟搜索
 │   ├── constants.py         # 技能挂载路径与环境变量常量
 │   ├── describe.py          # describe_skill 工具与技能索引提示词
+│   ├── effective.py         # 有效（已启用）技能根目录解析
 │   ├── frontmatter.py       # 共享的 SKILL.md frontmatter 解析
 │   ├── parser.py            # SKILL.md → Skill 元数据
+│   ├── state.py             # 技能运行时状态
 │   ├── storage.py           # 本地技能目录发现
 │   ├── types.py             # Skill、SkillCategory 数据类型
 │   └── validation.py        # frontmatter 校验工具
 ├── tools/
+│   ├── constants.py         # 工具常量与共享默认值
+│   ├── errors.py            # 稳定的工具错误码与格式化
 │   ├── execute.py           # Agent 命令执行工具
+│   ├── web_search.py        # DuckDuckGo 网页搜索工具
 │   └── workspace.py         # Agent 文件系统工具
 └── utils.py                 # 共享格式化与 glob 辅助函数
 ```
@@ -65,19 +73,31 @@ src/zharness/
 | `grep_files` | 在工作区文本文件中搜索字面字符串 |
 | `execute_command` | 从虚拟工作区 `cwd` 执行 Shell 命令 |
 | `web_search` | 查询 DuckDuckGo 并返回标题、URL 和摘要 |
+| `write_todos` | 为多步骤任务维护结构化计划（经 `TodoListMiddleware` 提供） |
+| `task` | 将自包含的目标委托给子 Agent（经 `SubAgentMiddleware` 提供） |
 | `describe_skill` | 获取已安装技能的元数据（存在技能时才注册） |
-| `knowledge_search` | 搜索当前 thread 已索引的参考资料 |
-| `knowledge_ingest` | 索引当前 thread 的 `/workspace` UTF-8 文件 |
-| `knowledge_list` | 列出当前 thread 的知识文档 |
-| `knowledge_delete` | 删除当前 thread 的知识文档 |
+| `knowledge_search` | 搜索当前 thread 已索引的参考资料（`knowledge.enabled` 时注册） |
+| `knowledge_ingest` | 索引当前 thread 的 `/workspace` UTF-8 文件（`knowledge.enabled` 时注册） |
+| `knowledge_list` | 列出当前 thread 的知识文档（`knowledge.enabled` 时注册） |
+| `knowledge_delete` | 删除当前 thread 的知识文档（`knowledge.enabled` 时注册） |
+| `memory_search` | 搜索用户的长期记忆（`memory.enabled` 时注册） |
+| `memory_add` | 向长期记忆添加事实（`memory.enabled` 时注册） |
+| `memory_update` | 更新已存储的长期记忆事实（`memory.enabled` 时注册） |
+| `memory_delete` | 删除长期记忆事实（`memory.enabled` 时注册） |
 
 Agent 同时启用了：
 
 - `TodoListMiddleware`：为多步骤任务维护 Todo 状态。
+- `DynamicDateMiddleware`：注入隐藏的当前日期提醒。
 - `SummarizationMiddleware`：根据模型上下文参数生成摘要；`mimo-v2.5` 在达到
   786,432 tokens 时触发，并保留最近 32 条消息。
 - `TitleMiddleware`：在首轮完整交互后将线程 `title` 写入状态。默认由首条用户
   消息在本地派生标题；设置 `title.model_name` 可使用专用模型生成。
+- `MemoryMiddleware`（`memory.enabled` 时启用）：排队执行独立的后台抽取，并提供
+  `memory_*` 工具（见“长期记忆”）。
+- `SubAgentMiddleware`：注册 `task` 委托工具并运行声明式子 Agent。
+- `TokenUsageMiddleware`（`token_usage.enabled` 时启用）：在每条 AI 消息上保留
+  提供商的 usage 元数据，并将委托的子 Agent 用量合并到发起调度的消息上。
 - `HumanInTheLoopMiddleware`：为 `execute_command` 提供每次运行可选的
   `allow_all` 和 `require_approval` 策略，默认为 `allow_all`。
 - `ToolErrorMiddleware`：记录内部异常，并向模型返回不含敏感细节的失败信息。
@@ -110,6 +130,11 @@ config = {"configurable": {"approval_strategy": "require_approval"}}
 非敏感配置位于本包旁的 `config.yaml`；密钥保留在 `langgraph.json` 加载的 `.env` 中。
 `zharness.config.loader` 按以下优先级解析每个值：环境变量 → YAML → 内置默认值。
 这样 `ZHARNESS_HOME` 等临时覆盖仍可作为环境变量使用，同时 `config.yaml` 成为主要配置面。
+
+主 Agent 与声明式子 Agent 会在消息历史开头收到一条隐藏的当前日期提醒。可在
+`config.yaml` 中设置 IANA `timezone` 值，或用 `ZHARNESS_TIMEZONE` 覆盖；默认值为
+`Asia/Shanghai`。该提醒在同一个本地日期内复用，并在午夜后原位替换，因此过期日期
+不会在会话中累积。
 
 ## 会话知识库
 

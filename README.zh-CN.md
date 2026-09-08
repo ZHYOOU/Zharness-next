@@ -9,12 +9,20 @@ ZHarness Next 是一个面向 AI 编程场景的 Agent 运行底座。它基于 
 项目目前处于早期开发阶段：`zharness` 已包含主要运行能力，`gateway` 仍是为后续
 网关层预留的包。
 
+## 前端预览
+
+![新对话页面](docs/img.png)
+
 ## 核心能力
 
 - 基于 LangGraph 和 LangChain 构建 Lead Agent。
 - 基于 LangChain Agent Chat UI 的 Next.js 对话前端。
 - 通过 MiMo、DeepSeek、OpenAI 或 Anthropic Chat Model 进行推理和工具调用。
-- 按 LangGraph `thread_id` 隔离工作区与执行容器。
+- 按 LangGraph `thread_id` 隔离工作区与执行容器，并在不同沙箱提供商之间共享同一套
+  虚拟路径模型。
+- 可选的 Token 用量统计（`token_usage.enabled`）：每条 AI 消息保留提供商返回的输入、
+  输出与总 token 数，并将委托的子 Agent 用量合并到发起调度的消息上，因此对去重的
+  AI 消息求和即可得到完整会话总量。该统计会显示在对话界面与设置对话框中。
 - 提供目录浏览、文件读写、精确编辑、删除、Glob 和文本搜索工具。
 - 使用 DuckDuckGo 网页搜索，返回标题、URL 和摘要，无需 API Key。
 - 可插拔的沙箱提供商：默认使用加固的 Docker 容器，也可通过
@@ -47,6 +55,7 @@ ZHarness Next 是一个面向 AI 编程场景的 Agent 运行底座。它基于 
 │   └── sandbox.Dockerfile    # Agent 命令执行环境
 ├── gateway/                  # 预留的外部网关包
 ├── frontend/                 # 基于 Agent Chat UI 的 Next.js 前端
+├── nginx/                    # 本地开发反向代理配置
 ├── scripts/
 │   ├── cleanup.py            # 清理会话、工作区与沙箱
 │   ├── dev.sh                # `make dev` 统一启动/停止脚本
@@ -56,7 +65,10 @@ ZHarness Next 是一个面向 AI 编程场景的 Agent 运行底座。它基于 
 ├── skills/                   # 仓库内置的 SKILL.md 技能包（public）
 ├── zharness/                 # Agent、工具、工作区和沙箱实现
 │   └── config.yaml           # 非敏感 YAML 配置
+├── docs/                     # 项目文档与截图
+├── docker-compose.yml        # 本地开发使用的托管 PostgreSQL
 ├── langgraph.json            # LangGraph 图与 HTTP 应用配置
+├── Makefile                  # 项目命令别名（见 `make help`）
 ├── pyproject.toml            # uv workspace 配置
 └── uv.lock                   # 锁定的 Python 依赖
 ```
@@ -117,15 +129,18 @@ ZHarness 服务进程的宿主权限。
 uv sync --all-packages
 ```
 
-### 2. 构建沙箱镜像
+### 2. 构建沙箱镜像（默认 Docker 提供商）
 
 ```bash
 docker build -f docker/sandbox.Dockerfile -t zharness-sandbox:latest .
 ```
 
+仅在使用本地提供商时才需要跳过此步骤。
+
 ### 3. 配置服务
 
-非敏感配置位于 `zharness/config.yaml`；仅把密钥写入 `zharness/.env`。至少配置：
+非敏感配置位于 `zharness/config.yaml`；仅把密钥写入 `zharness/.env`。请将已提交的
+模板 `zharness/.env.example` 复制为 `zharness/.env`（仅用于存放密钥）。至少配置：
 
 ```yaml
 # zharness/config.yaml

@@ -20,7 +20,7 @@ src/zharness/
 │   └── paths.py             # Data home and thread workspace resolution
 ├── knowledge/               # Thread-scoped RAG ingestion and retrieval
 ├── memory/                  # Long-term memory: extraction, gate, scoring, tools
-├── middleware/              # Todo, title, subagent, and date middlewares
+├── middleware/              # Date, subagent, title, and token-usage middlewares
 ├── models/
 │   └── factory.py           # Chat model factory
 ├── sandbox/
@@ -32,20 +32,28 @@ src/zharness/
 │   └── workspace.py         # Shared /workspace path contract and validation
 ├── server/
 │   ├── checkpointer.py      # PostgreSQL-backed checkpoint lifecycle
+│   ├── database.py          # Database connection lifecycle
 │   ├── graph.py             # LangGraph graph entry point
 │   ├── http.py              # Sandbox cleanup middleware and server lifespan
-│   └── memory.py            # Memory management HTTP endpoints
+│   ├── knowledge.py         # Knowledge management HTTP endpoints
+│   ├── memory.py            # Memory management HTTP endpoints
+│   └── skills.py            # Skills management HTTP endpoints
 ├── skills/
 │   ├── catalog.py           # Immutable skill catalog with deferred search
 │   ├── constants.py         # Skills mount path and env-var constants
 │   ├── describe.py          # describe_skill tool and skill-index prompt
+│   ├── effective.py         # Effective (enabled) skills root resolution
 │   ├── frontmatter.py       # Shared SKILL.md frontmatter parsing
 │   ├── parser.py            # SKILL.md → Skill metadata
+│   ├── state.py             # Skills runtime state
 │   ├── storage.py           # Local skills-directory discovery
 │   ├── types.py             # Skill, SkillCategory data types
 │   └── validation.py        # Frontmatter validation utilities
 ├── tools/
+│   ├── constants.py         # Tool constants and shared defaults
+│   ├── errors.py            # Stable tool error codes and formatting
 │   ├── execute.py           # Agent command-execution tool
+│   ├── web_search.py        # DuckDuckGo web-search tool
 │   └── workspace.py         # Agent filesystem tools
 └── utils.py                 # Shared formatting and glob helpers
 ```
@@ -66,21 +74,35 @@ src/zharness/
 | `grep_files` | Search workspace text files for a literal string |
 | `execute_command` | Run a shell command from a virtual workspace `cwd` |
 | `web_search` | Query DuckDuckGo and return titles, URLs, and snippets |
+| `write_todos` | Maintain a structured plan for multi-step tasks (via `TodoListMiddleware`) |
+| `task` | Delegate a self-contained objective to a subagent (via `SubAgentMiddleware`) |
 | `describe_skill` | Fetch metadata for installed skills (registered when skills exist) |
-| `knowledge_search` | Search indexed reference material for the current thread |
-| `knowledge_ingest` | Index current-thread `/workspace` UTF-8 files |
-| `knowledge_list` | List current-thread knowledge documents |
-| `knowledge_delete` | Delete a current-thread knowledge document |
+| `knowledge_search` | Search indexed reference material for the current thread (when `knowledge.enabled`) |
+| `knowledge_ingest` | Index current-thread `/workspace` UTF-8 files (when `knowledge.enabled`) |
+| `knowledge_list` | List current-thread knowledge documents (when `knowledge.enabled`) |
+| `knowledge_delete` | Delete a current-thread knowledge document (when `knowledge.enabled`) |
+| `memory_search` | Search the user's long-term memory (when `memory.enabled`) |
+| `memory_add` | Add a fact to long-term memory (when `memory.enabled`) |
+| `memory_update` | Update a stored long-term-memory fact (when `memory.enabled`) |
+| `memory_delete` | Delete a long-term-memory fact (when `memory.enabled`) |
 
 The agent also enables:
 
 - `TodoListMiddleware` for tracking multi-step tasks.
+- `DynamicDateMiddleware`, which injects a hidden current-date reminder.
 - `SummarizationMiddleware`, which uses model-specific context parameters. For
   `mimo-v2.5`, it summarizes at 786,432 tokens and retains the 32 most recent
   messages.
 - `TitleMiddleware`, which writes a thread `title` into the state after the
   first complete exchange. By default it derives the title from the first user
   message locally; set `title.model_name` to use a dedicated model instead.
+- `MemoryMiddleware` when `memory.enabled`, which queues detached background
+  extraction and exposes the `memory_*` tools (see Long-Term Memory).
+- `SubAgentMiddleware`, which registers the `task` delegation tool and runs
+  declarative subagents.
+- `TokenUsageMiddleware` when `token_usage.enabled`, which retains provider
+  usage metadata on each AI message and folds delegated subagent usage into the
+  dispatching message.
 - `HumanInTheLoopMiddleware`, which supports per-run `allow_all` and
   `require_approval` strategies for `execute_command`; `allow_all` is the
   default.
@@ -267,9 +289,9 @@ files there but cannot write, edit, or delete anything under it.
 ## Docker Sandbox
 
 The Lead Agent creates or reuses one sandbox per LangGraph thread when the
-first file or command tool runs. The thread workspace is mapped to the virtual
-root `/`; the skills directory is mounted read-only at `/mnt/skills`. The
-sandbox is constrained as follows:
+first file or command tool runs. The thread workspace is mounted into the
+container at `/workspace` (read-write), and the skills directory is mounted
+read-only at `/mnt/skills`. The sandbox is constrained as follows:
 
 - read-only root filesystem;
 - network access through Docker's default bridge (disable with

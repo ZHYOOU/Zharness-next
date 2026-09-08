@@ -20,6 +20,11 @@ future gateway layer.
 - A Lead Agent built with LangGraph and LangChain.
 - A Next.js chat frontend based on LangChain Agent Chat UI.
 - Reasoning and tool calling through MiMo, DeepSeek, OpenAI, or Anthropic chat models.
+- Optional provider-reported token usage accounting (`token_usage.enabled`): input,
+  output, and total token counts are retained per AI message, with delegated
+  subagent usage folded into the dispatching message so summing unique messages
+  yields the complete conversation total. Shown in the chat UI and the settings
+  dialog.
 - Thread-scoped workspaces with a shared virtual path model across sandbox
   providers.
 - Tools for directory listing, file reading and writing, exact edits, deletion,
@@ -65,6 +70,7 @@ future gateway layer.
 │   └── sandbox.Dockerfile    # Agent command-execution environment
 ├── gateway/                  # Placeholder for a future external gateway
 ├── frontend/                 # Next.js frontend based on Agent Chat UI
+├── nginx/                    # Local development reverse-proxy config
 ├── scripts/
 │   ├── cleanup.py            # Remove sessions, workspaces, and sandboxes
 │   ├── dev.sh                # Unified `make dev` startup/stop launcher
@@ -74,7 +80,10 @@ future gateway layer.
 ├── skills/                   # Bundled SKILL.md packages (public)
 ├── zharness/                 # Agent, tools, workspace, and sandbox runtime
 │   └── config.yaml           # Non-secret YAML configuration
+├── docs/                     # Project documentation and screenshots
+├── docker-compose.yml        # Managed PostgreSQL for local development
 ├── langgraph.json            # LangGraph graph and HTTP application config
+├── Makefile                  # Project command aliases (see `make help`)
 ├── pyproject.toml            # uv workspace configuration
 └── uv.lock                   # Locked Python dependencies
 ```

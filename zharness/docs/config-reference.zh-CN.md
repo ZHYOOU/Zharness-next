@@ -98,6 +98,7 @@ API Key 和 `LANGSMITH_API_KEY` 始终从环境（`.env`）读取。
 | `knowledge.embedding.max_retries` | `2` | 嵌入请求重试次数 |
 | `knowledge.chunking.size_characters` | `2000` | 文档切分块大小（字符） |
 | `knowledge.chunking.overlap_characters` | `200` | 切分块重叠（字符） |
+| `knowledge.chunking.add_start_index` | `true` | 是否包含每个切分块的起始字符偏移 |
 | `knowledge.retrieval.search_type` | `similarity` | LangChain 检索类型：`similarity`、`similarity_score_threshold` 或 `mmr` |
 | `knowledge.retrieval.search_kwargs.k` | `6` | 检索返回的结果数 |
 | `knowledge.retrieval.search_kwargs.fetch_k` | `40` | MMR 候选池大小 |
@@ -105,6 +106,11 @@ API Key 和 `LANGSMITH_API_KEY` 始终从环境（`.env`）读取。
 | `knowledge.retrieval.search_kwargs.score_threshold` | 无 | `similarity_score_threshold` 的分数阈值 |
 | `knowledge.retrieval.hybrid.enabled` | `true` | 是否启用稠密/全文混合检索 |
 | `knowledge.retrieval.hybrid.fusion_function` | `reciprocal_rank_fusion` | 融合函数：`reciprocal_rank_fusion` 或 `weighted_sum_ranking` |
+| `knowledge.retrieval.hybrid.primary_top_k` | `40` | 主（稠密）检索器的候选条数 |
+| `knowledge.retrieval.hybrid.secondary_top_k` | `40` | 次（全文）检索器的候选条数 |
+| `knowledge.retrieval.hybrid.fusion_function_parameters.rrf_k` | `60` | 倒数排名融合（RRF）的常数 `k` |
+| `knowledge.retrieval.hybrid.fusion_function_parameters.primary_results_weight` | `0.5` | 加权求和排名中主（稠密）结果的权重 |
+| `knowledge.retrieval.hybrid.fusion_function_parameters.secondary_results_weight` | `0.5` | 加权求和排名中次（全文）结果的权重 |
 | `knowledge.retrieval.max_context_chars` | `12000` | 传给模型的检索上下文最大字符数 |
 | `knowledge.limits.max_file_bytes` | `5242880` | 单文件导入上限（字节） |
 | `knowledge.limits.max_files_per_call` | `20` | 每次导入调用的文件数上限 |

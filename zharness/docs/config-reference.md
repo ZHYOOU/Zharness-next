@@ -101,6 +101,7 @@ produces the complete conversation total.
 | `knowledge.embedding.max_retries` | `2` | Embedding request retries |
 | `knowledge.chunking.size_characters` | `2000` | Document chunk size in characters |
 | `knowledge.chunking.overlap_characters` | `200` | Chunk overlap in characters |
+| `knowledge.chunking.add_start_index` | `true` | Include the start character offset of each chunk |
 | `knowledge.retrieval.search_type` | `similarity` | LangChain search type: `similarity`, `similarity_score_threshold`, or `mmr` |
 | `knowledge.retrieval.search_kwargs.k` | `6` | Number of retrieved results |
 | `knowledge.retrieval.search_kwargs.fetch_k` | `40` | MMR candidate pool size |
@@ -108,6 +109,11 @@ produces the complete conversation total.
 | `knowledge.retrieval.search_kwargs.score_threshold` | None | Score threshold for `similarity_score_threshold` |
 | `knowledge.retrieval.hybrid.enabled` | `true` | Enable hybrid dense/full-text search |
 | `knowledge.retrieval.hybrid.fusion_function` | `reciprocal_rank_fusion` | Fusion function: `reciprocal_rank_fusion` or `weighted_sum_ranking` |
+| `knowledge.retrieval.hybrid.primary_top_k` | `40` | Candidate count for the primary (dense) retriever |
+| `knowledge.retrieval.hybrid.secondary_top_k` | `40` | Candidate count for the secondary (full-text) retriever |
+| `knowledge.retrieval.hybrid.fusion_function_parameters.rrf_k` | `60` | RRF constant `k` for reciprocal rank fusion |
+| `knowledge.retrieval.hybrid.fusion_function_parameters.primary_results_weight` | `0.5` | Weight of primary (dense) results for weighted-sum ranking |
+| `knowledge.retrieval.hybrid.fusion_function_parameters.secondary_results_weight` | `0.5` | Weight of secondary (full-text) results for weighted-sum ranking |
 | `knowledge.retrieval.max_context_chars` | `12000` | Maximum characters of retrieved context passed to the model |
 | `knowledge.limits.max_file_bytes` | `5242880` | Maximum bytes per ingested file |
 | `knowledge.limits.max_files_per_call` | `20` | Maximum files per ingest call |
