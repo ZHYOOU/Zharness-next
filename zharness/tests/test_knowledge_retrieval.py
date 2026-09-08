@@ -78,6 +78,29 @@ async def test_hybrid_similarity_uses_fresh_config_and_thread_filter() -> None:
 
 
 @pytest.mark.asyncio
+async def test_search_accepts_bound_knowledge_base_scopes() -> None:
+    store = FakeVectorStore([])
+    retriever = KnowledgeRetriever(
+        store,  # type: ignore[arg-type]
+        FakeRepository(),  # type: ignore[arg-type]
+        KnowledgeRetrievalSettings(),
+    )
+
+    await retriever.search(
+        "thread-a",
+        "reference",
+        scope_ids=["thread-a", "knowledge-base:base-a"],
+    )
+
+    assert store.calls[0]["search_kwargs"]["filter"] == {
+        "$and": [
+            {"thread_id": {"$in": ["thread-a", "knowledge-base:base-a"]}},
+            {"is_active": True},
+        ]
+    }
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("search_type", "extra_key", "extra_value"),
     [

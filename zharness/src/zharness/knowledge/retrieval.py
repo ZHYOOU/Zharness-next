@@ -42,6 +42,7 @@ class KnowledgeRetriever:
         query: str,
         *,
         limit: int | None = None,
+        scope_ids: list[str] | None = None,
     ) -> dict[str, Any]:
         """Retrieve ranked chunks constrained to the owning thread.
 
@@ -52,20 +53,21 @@ class KnowledgeRetriever:
             return self._response([], limit=0)
 
         result_limit = max(1, min(limit or self._settings.result_limit, 20))
-        search_kwargs = self._search_kwargs(thread_id, result_limit, query)
+        scopes = scope_ids or [thread_id]
+        search_kwargs = self._search_kwargs(scopes, result_limit, query)
         retriever = self._vector_store.as_retriever(
             search_type=self._settings.search_type,
             search_kwargs=search_kwargs,
         )
         documents = await retriever.ainvoke(query)
         ranked = [_document_to_result(document) for document in documents]
-        expanded = await self._expand_neighbors(thread_id, ranked, result_limit)
+        expanded = await self._expand_neighbors(ranked, result_limit)
         bounded = _apply_context_budget(expanded, self._settings.max_context_chars)
         return self._response(bounded, limit=result_limit)
 
     def _search_kwargs(
         self,
-        thread_id: str,
+        scope_ids: list[str],
         result_limit: int,
         query: str,
     ) -> dict[str, Any]:
@@ -73,11 +75,14 @@ class KnowledgeRetriever:
 
         构建每次调用独立的检索参数及强制作用域过滤器。
         """
+        scope_filter: str | dict[str, list[str]] = (
+            scope_ids[0] if len(scope_ids) == 1 else {"$in": scope_ids}
+        )
         search_kwargs: dict[str, Any] = {
             "k": result_limit,
             "filter": {
                 "$and": [
-                    {"thread_id": thread_id},
+                    {"thread_id": scope_filter},
                     {"is_active": True},
                 ]
             },
@@ -120,7 +125,6 @@ class KnowledgeRetriever:
 
     async def _expand_neighbors(
         self,
-        thread_id: str,
         ranked: list[KnowledgeSearchResult],
         limit: int,
     ) -> list[KnowledgeSearchResult]:
@@ -134,7 +138,7 @@ class KnowledgeRetriever:
             if len(selected) >= limit:
                 break
             neighbors = await self._repository.adjacent_chunks(
-                thread_id,
+                result.scope_id,
                 result.document_id,
                 result.ordinal,
             )
@@ -178,6 +182,7 @@ def _document_to_result(document: Document) -> KnowledgeSearchResult:
         source_uri=str(metadata.get("source_uri", "")),
         locator=_mapping(metadata.get("locator")),
         ordinal=int(metadata.get("ordinal", 0)),
+        scope_id=str(metadata.get("thread_id", "")),
     )
 
 

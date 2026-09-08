@@ -8,21 +8,19 @@ import {
   FileText,
   Pencil,
   Plus,
-  Search,
   Server,
   Sparkles,
-  Trash2,
-  Upload,
   Wrench,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { SkillSettings } from "@/components/skill-settings";
 import { MemorySettings } from "@/components/memory-settings";
+import { KnowledgeSettings } from "@/components/knowledge-settings";
 
 type SettingsSection = "memory" | "knowledge" | "tools" | "skills";
 
@@ -42,21 +40,6 @@ const sections = [
   icon: typeof Brain;
 }>;
 
-const initialKnowledgeBases = [
-  {
-    id: 1,
-    name: "产品文档",
-    description: "产品说明、使用手册与常见问题",
-    files: 24,
-  },
-  {
-    id: 2,
-    name: "个人笔记",
-    description: "日常记录与项目资料",
-    files: 8,
-  },
-];
-
 const initialTools = [
   {
     id: 1,
@@ -70,30 +53,6 @@ const initialTools = [
     name: "web-search",
     description: "检索公开网络信息并返回相关结果",
     command: "uvx mcp-server-web-search",
-    enabled: false,
-  },
-];
-
-const initialSkills = [
-  {
-    id: 1,
-    name: "data-analysis",
-    description: "分析 Excel、CSV 等结构化数据，生成统计结果与摘要。",
-    scope: "公共",
-    enabled: true,
-  },
-  {
-    id: 2,
-    name: "deep-research",
-    description: "针对需要在线资料的问题执行系统化、多角度的深入研究。",
-    scope: "公共",
-    enabled: true,
-  },
-  {
-    id: 3,
-    name: "ppt-generation",
-    description: "根据主题和资料生成内容完整、视觉清晰的演示文稿。",
-    scope: "自定义",
     enabled: false,
   },
 ];
@@ -114,115 +73,6 @@ function SectionHeading({
         <p className="text-muted-foreground mt-1.5 text-sm">{description}</p>
       </div>
       {action}
-    </div>
-  );
-}
-
-function KnowledgeSettings() {
-  const [query, setQuery] = useState("");
-  const [knowledgeBases, setKnowledgeBases] = useState(initialKnowledgeBases);
-
-  const filteredItems = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    if (!normalizedQuery) return knowledgeBases;
-    return knowledgeBases.filter((item) =>
-      `${item.name} ${item.description}`
-        .toLowerCase()
-        .includes(normalizedQuery),
-    );
-  }, [knowledgeBases, query]);
-
-  const createKnowledgeBase = () => {
-    const nextNumber = knowledgeBases.length + 1;
-    setKnowledgeBases((items) => [
-      ...items,
-      {
-        id: Date.now(),
-        name: `新知识库 ${nextNumber}`,
-        description: "暂无描述",
-        files: 0,
-      },
-    ]);
-  };
-
-  return (
-    <div className="space-y-6">
-      <SectionHeading
-        title="知识库"
-        description="创建知识库、索引文档并测试 RAG 检索效果。"
-        action={
-          <Button onClick={createKnowledgeBase}>
-            <Plus /> 创建知识库
-          </Button>
-        }
-      />
-      <div className="relative max-w-lg">
-        <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-        <Input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          className="h-11 pl-9"
-          placeholder="搜索文档或知识库"
-        />
-      </div>
-      <div className="space-y-3">
-        {filteredItems.map((item) => (
-          <div
-            key={item.id}
-            className="group hover:bg-muted/40 flex items-center gap-4 rounded-xl border p-4 transition-colors"
-          >
-            <div className="bg-muted flex size-10 shrink-0 items-center justify-center rounded-lg">
-              <Database className="size-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <p className="font-medium">{item.name}</p>
-                <span className="text-muted-foreground text-xs">
-                  {item.files} 个文档
-                </span>
-              </div>
-              <p className="text-muted-foreground mt-1 truncate text-sm">
-                {item.description}
-              </p>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={`上传文档到 ${item.name}`}
-              title="上传文档"
-            >
-              <Upload />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={`编辑 ${item.name}`}
-              title="编辑"
-            >
-              <Pencil />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="hover:bg-destructive/10 hover:text-destructive"
-              aria-label={`删除 ${item.name}`}
-              title="删除"
-              onClick={() =>
-                setKnowledgeBases((items) =>
-                  items.filter((candidate) => candidate.id !== item.id),
-                )
-              }
-            >
-              <Trash2 />
-            </Button>
-          </div>
-        ))}
-        {filteredItems.length === 0 && (
-          <div className="text-muted-foreground rounded-xl border border-dashed py-14 text-center text-sm">
-            没有找到匹配的知识库
-          </div>
-        )}
-      </div>
     </div>
   );
 }
@@ -298,90 +148,6 @@ function ToolSettings() {
             </div>
           </div>
         ))}
-      </div>
-    </div>
-  );
-}
-
-function SkillSettings() {
-  const [scope, setScope] = useState<"公共" | "自定义">("公共");
-  const [skills, setSkills] = useState(initialSkills);
-
-  const visibleSkills = skills.filter((skill) => skill.scope === scope);
-
-  const createSkill = () => {
-    setScope("自定义");
-    setSkills((items) => [
-      ...items,
-      {
-        id: Date.now(),
-        name: `custom-skill-${items.length + 1}`,
-        description: "描述该技能适用的任务和触发条件。",
-        scope: "自定义",
-        enabled: false,
-      },
-    ]);
-  };
-
-  return (
-    <div className="space-y-5">
-      <SectionHeading
-        title="技能"
-        description="管理 Agent Skill 配置和启用状态。"
-        action={
-          <Button onClick={createSkill}>
-            <Sparkles /> 新建技能
-          </Button>
-        }
-      />
-      <div className="border-b">
-        {(["公共", "自定义"] as const).map((item) => (
-          <button
-            key={item}
-            type="button"
-            className={cn(
-              "text-muted-foreground relative px-3 py-2 text-sm transition-colors",
-              scope === item && "text-foreground",
-            )}
-            onClick={() => setScope(item)}
-          >
-            {item}
-            {scope === item && (
-              <span className="bg-foreground absolute inset-x-0 -bottom-px h-0.5" />
-            )}
-          </button>
-        ))}
-      </div>
-      <div className="space-y-3">
-        {visibleSkills.map((skill) => (
-          <div
-            key={skill.id}
-            className="flex items-start gap-4 rounded-xl border p-5"
-          >
-            <div className="min-w-0 flex-1">
-              <p className="font-medium">{skill.name}</p>
-              <p className="text-muted-foreground mt-1 text-sm leading-6">
-                {skill.description}
-              </p>
-            </div>
-            <Switch
-              aria-label={`启用 ${skill.name}`}
-              checked={skill.enabled}
-              onCheckedChange={(enabled) =>
-                setSkills((items) =>
-                  items.map((item) =>
-                    item.id === skill.id ? { ...item, enabled } : item,
-                  ),
-                )
-              }
-            />
-          </div>
-        ))}
-        {visibleSkills.length === 0 && (
-          <div className="text-muted-foreground rounded-xl border border-dashed py-14 text-center text-sm">
-            暂无{scope}技能
-          </div>
-        )}
       </div>
     </div>
   );

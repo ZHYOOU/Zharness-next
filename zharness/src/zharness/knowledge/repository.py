@@ -58,6 +58,24 @@ class KnowledgeRepository:
                 UNIQUE (thread_id, source_uri, content_hash)
             )
             """,
+            """
+            CREATE TABLE IF NOT EXISTS zharness_knowledge_bases (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS zharness_knowledge_bindings (
+                thread_id TEXT NOT NULL,
+                knowledge_base_id TEXT NOT NULL
+                    REFERENCES zharness_knowledge_bases(id) ON DELETE CASCADE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                PRIMARY KEY (thread_id, knowledge_base_id)
+            )
+            """,
             f"""
             CREATE TABLE IF NOT EXISTS zharness_knowledge_chunks (
                 id TEXT PRIMARY KEY,
@@ -272,6 +290,117 @@ class KnowledgeRepository:
         )
         return [_row_to_document(row) for row in rows]
 
+    async def list_knowledge_bases(self) -> list[dict[str, Any]]:
+        """List reusable knowledge bases and document counts. / 列出可复用知识库及文档数量。"""
+        rows = await self._fetchall(
+            """
+            SELECT base.id, base.name, base.description, base.created_at,
+                   base.updated_at, COUNT(document.id)
+            FROM zharness_knowledge_bases AS base
+            LEFT JOIN zharness_knowledge_documents AS document
+              ON document.thread_id = 'knowledge-base:' || base.id
+             AND document.status <> 'superseded'
+            GROUP BY base.id
+            ORDER BY base.updated_at DESC, base.name
+            """
+        )
+        return [
+            {
+                "id": str(row[0]),
+                "name": str(row[1]),
+                "description": str(row[2]),
+                "created_at": row[3],
+                "updated_at": row[4],
+                "document_count": int(row[5]),
+            }
+            for row in rows
+        ]
+
+    async def create_knowledge_base(
+        self, knowledge_base_id: str, name: str, description: str
+    ) -> None:
+        """Create reusable knowledge-base metadata. / 创建可复用知识库元数据。"""
+        await self._execute(
+            "INSERT INTO zharness_knowledge_bases (id, name, description) VALUES (%s, %s, %s)",
+            (knowledge_base_id, name, description),
+        )
+
+    async def update_knowledge_base(
+        self, knowledge_base_id: str, name: str, description: str
+    ) -> bool:
+        """Update one reusable knowledge base. / 更新一个可复用知识库。"""
+        return (
+            await self._mutate_count(
+                """
+                UPDATE zharness_knowledge_bases
+                SET name = %s, description = %s, updated_at = now()
+                WHERE id = %s
+                """,
+                (name, description, knowledge_base_id),
+            )
+            > 0
+        )
+
+    async def delete_knowledge_base(self, knowledge_base_id: str) -> bool:
+        """Delete metadata and indexed documents for one base. / 删除一个知识库的元数据及索引文档。"""
+        conn = await self._open()
+        try:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    "DELETE FROM zharness_knowledge_documents WHERE thread_id = %s",
+                    (f"knowledge-base:{knowledge_base_id}",),
+                )
+                await cursor.execute(
+                    "DELETE FROM zharness_knowledge_bases WHERE id = %s",
+                    (knowledge_base_id,),
+                )
+                deleted = cursor.rowcount > 0
+            await conn.commit()
+        finally:
+            await conn.close()
+        return deleted
+
+    async def knowledge_base_exists(self, knowledge_base_id: str) -> bool:
+        """Return whether a knowledge base exists. / 返回知识库是否存在。"""
+        rows = await self._fetchall(
+            "SELECT 1 FROM zharness_knowledge_bases WHERE id = %s LIMIT 1",
+            (knowledge_base_id,),
+        )
+        return bool(rows)
+
+    async def list_bindings(self, thread_id: str) -> list[str]:
+        """List knowledge bases bound to a thread. / 列出会话绑定的知识库。"""
+        rows = await self._fetchall(
+            """
+            SELECT knowledge_base_id FROM zharness_knowledge_bindings
+            WHERE thread_id = %s ORDER BY created_at
+            """,
+            (thread_id,),
+        )
+        return [str(row[0]) for row in rows]
+
+    async def set_bindings(self, thread_id: str, knowledge_base_ids: list[str]) -> None:
+        """Replace all knowledge-base bindings for a thread. / 替换会话的全部知识库绑定。"""
+        conn = await self._open()
+        try:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    "DELETE FROM zharness_knowledge_bindings WHERE thread_id = %s",
+                    (thread_id,),
+                )
+                if knowledge_base_ids:
+                    await cursor.executemany(
+                        """
+                        INSERT INTO zharness_knowledge_bindings
+                            (thread_id, knowledge_base_id)
+                        VALUES (%s, %s)
+                        """,
+                        [(thread_id, item) for item in knowledge_base_ids],
+                    )
+            await conn.commit()
+        finally:
+            await conn.close()
+
     async def delete_document(self, thread_id: str, document_id: str) -> bool:
         """Delete one document inside its owning thread. / 在所属线程内删除单个文档。"""
         return await self._delete(
@@ -281,10 +410,22 @@ class KnowledgeRepository:
 
     async def delete_thread(self, thread_id: str) -> int:
         """Delete every knowledge document owned by a thread. / 删除某线程拥有的全部知识文档。"""
-        return await self._delete_count(
-            "DELETE FROM zharness_knowledge_documents WHERE thread_id = %s",
-            (thread_id,),
-        )
+        conn = await self._open()
+        try:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    "DELETE FROM zharness_knowledge_bindings WHERE thread_id = %s",
+                    (thread_id,),
+                )
+                await cursor.execute(
+                    "DELETE FROM zharness_knowledge_documents WHERE thread_id = %s",
+                    (thread_id,),
+                )
+                count = cursor.rowcount
+            await conn.commit()
+        finally:
+            await conn.close()
+        return count
 
     async def adjacent_chunks(
         self,
@@ -297,7 +438,8 @@ class KnowledgeRepository:
         """Return active neighboring chunks around one hit. / 返回某个命中附近的活跃切片。"""
         rows = await self._fetchall(
             """
-            SELECT content, document_id, id, title, source_uri, locator, ordinal
+            SELECT content, document_id, id, title, source_uri, locator, ordinal,
+                   thread_id
             FROM zharness_knowledge_chunks
             WHERE thread_id = %s AND document_id = %s AND is_active = TRUE
               AND ordinal BETWEEN %s AND %s
@@ -387,6 +529,18 @@ class KnowledgeRepository:
             await conn.close()
         return count
 
+    async def _mutate_count(self, sql: str, params: Sequence[Any]) -> int:
+        """Execute a mutation and return its affected-row count. / 执行修改并返回影响行数。"""
+        conn = await self._open()
+        try:
+            async with conn.cursor() as cursor:
+                await cursor.execute(sql, params)
+                count = cursor.rowcount
+            await conn.commit()
+        finally:
+            await conn.close()
+        return count
+
     async def _fetchall(
         self,
         sql: str,
@@ -428,4 +582,5 @@ def _row_to_search_result(row: Sequence[Any]) -> KnowledgeSearchResult:
         source_uri=str(row[4]),
         locator=dict(row[5] or {}),
         ordinal=int(row[6]),
+        scope_id=str(row[7]) if len(row) > 7 else "",
     )

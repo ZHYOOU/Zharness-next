@@ -7,6 +7,7 @@ import hashlib
 import json
 import logging
 import mimetypes
+import uuid
 from collections.abc import Callable
 from pathlib import PurePosixPath
 from typing import Any
@@ -150,7 +151,11 @@ class KnowledgeService:
         if self._retriever is None:
             raise KnowledgeUnavailableError("knowledge retriever is unavailable")
         try:
-            return await self._retriever.search(thread_id, query, limit=limit)
+            bindings = await self._repository.list_bindings(thread_id)
+            scopes = [thread_id, *(f"knowledge-base:{item}" for item in bindings)]
+            return await self._retriever.search(
+                thread_id, query, limit=limit, scope_ids=scopes
+            )
         except Exception as exc:
             logger.exception("Knowledge search failed")
             raise KnowledgeUnavailableError(str(exc)) from exc
@@ -194,6 +199,124 @@ class KnowledgeService:
             return await self._repository.delete_thread(thread_id)
         except Exception as exc:
             raise KnowledgeUnavailableError(str(exc)) from exc
+
+    async def list_knowledge_bases(self) -> dict[str, Any]:
+        """List reusable knowledge bases. / 列出可复用知识库。"""
+        await self._ensure_repository_ready()
+        try:
+            bases = await self._repository.list_knowledge_bases()
+        except Exception as exc:
+            raise KnowledgeUnavailableError(str(exc)) from exc
+        for item in bases:
+            item["created_at"] = _serialize_time(item["created_at"])
+            item["updated_at"] = _serialize_time(item["updated_at"])
+        return {"knowledge_bases": bases}
+
+    async def create_knowledge_base(
+        self, name: str, description: str
+    ) -> dict[str, Any]:
+        """Create reusable knowledge-base metadata. / 创建可复用知识库元数据。"""
+        await self._ensure_repository_ready()
+        knowledge_base_id = uuid.uuid4().hex
+        try:
+            await self._repository.create_knowledge_base(
+                knowledge_base_id, name, description
+            )
+        except Exception as exc:
+            raise KnowledgeUnavailableError(str(exc)) from exc
+        return {
+            "id": knowledge_base_id,
+            "name": name,
+            "description": description,
+            "document_count": 0,
+        }
+
+    async def update_knowledge_base(
+        self, knowledge_base_id: str, name: str, description: str
+    ) -> dict[str, Any]:
+        """Update reusable knowledge-base metadata. / 更新可复用知识库元数据。"""
+        await self._ensure_repository_ready()
+        try:
+            updated = await self._repository.update_knowledge_base(
+                knowledge_base_id, name, description
+            )
+        except Exception as exc:
+            raise KnowledgeUnavailableError(str(exc)) from exc
+        if not updated:
+            return {"error": "knowledge base not found"}
+        return {"id": knowledge_base_id, "name": name, "description": description}
+
+    async def delete_knowledge_base(self, knowledge_base_id: str) -> dict[str, Any]:
+        """Delete a reusable knowledge base and its documents. / 删除可复用知识库及其文档。"""
+        await self._ensure_repository_ready()
+        try:
+            deleted = await self._repository.delete_knowledge_base(knowledge_base_id)
+        except Exception as exc:
+            raise KnowledgeUnavailableError(str(exc)) from exc
+        if not deleted:
+            return {"error": "knowledge base not found"}
+        return {"id": knowledge_base_id, "status": "deleted"}
+
+    async def list_knowledge_base_documents(
+        self, knowledge_base_id: str
+    ) -> dict[str, Any]:
+        """List documents indexed in a reusable knowledge base. / 列出可复用知识库中的文档。"""
+        await self._ensure_repository_ready()
+        if not await self._repository.knowledge_base_exists(knowledge_base_id):
+            return {"error": "knowledge base not found"}
+        return await self.list_documents(f"knowledge-base:{knowledge_base_id}")
+
+    async def add_knowledge_base_document(
+        self,
+        knowledge_base_id: str,
+        filename: str,
+        content: str,
+        *,
+        replace: bool = False,
+    ) -> dict[str, Any]:
+        """Index one UTF-8 document in a reusable knowledge base. / 在可复用知识库中索引一个 UTF-8 文档。"""
+        await self._ensure_ready()
+        if not await self._repository.knowledge_base_exists(knowledge_base_id):
+            return {"error": "knowledge base not found"}
+        outcome = await self._ingest_content(
+            f"knowledge-base:{knowledge_base_id}",
+            f"upload://{filename}",
+            content.encode("utf-8"),
+            replace=replace,
+        )
+        return outcome
+
+    async def delete_knowledge_base_document(
+        self, knowledge_base_id: str, document_id: str
+    ) -> dict[str, Any]:
+        """Delete one document from a reusable knowledge base. / 从可复用知识库中删除一个文档。"""
+        return await self.delete_document(
+            f"knowledge-base:{knowledge_base_id}", document_id
+        )
+
+    async def get_bindings(self, thread_id: str) -> dict[str, Any]:
+        """Return knowledge-base bindings for a thread. / 返回会话的知识库绑定。"""
+        await self._ensure_repository_ready()
+        try:
+            bound_ids = await self._repository.list_bindings(thread_id)
+        except Exception as exc:
+            raise KnowledgeUnavailableError(str(exc)) from exc
+        return {"thread_id": thread_id, "knowledge_base_ids": bound_ids}
+
+    async def set_bindings(
+        self, thread_id: str, knowledge_base_ids: list[str]
+    ) -> dict[str, Any]:
+        """Replace knowledge-base bindings for a thread. / 替换会话的知识库绑定。"""
+        await self._ensure_repository_ready()
+        unique_ids = list(dict.fromkeys(knowledge_base_ids))
+        try:
+            for item in unique_ids:
+                if not await self._repository.knowledge_base_exists(item):
+                    return {"error": f"knowledge base not found: {item}"}
+            await self._repository.set_bindings(thread_id, unique_ids)
+        except Exception as exc:
+            raise KnowledgeUnavailableError(str(exc)) from exc
+        return {"thread_id": thread_id, "knowledge_base_ids": unique_ids}
 
     async def close(self) -> None:
         """Close lazy database resources. / 关闭延迟创建的数据库资源。"""

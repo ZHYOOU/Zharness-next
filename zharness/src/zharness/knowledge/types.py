@@ -48,6 +48,7 @@ class KnowledgeSearchResult:
     source_uri: str
     locator: dict[str, Any]
     ordinal: int
+    scope_id: str = ""
 
     def to_dict(self, *, rank: int) -> dict[str, Any]:
         """Serialize the result with a stable rank. / 使用稳定排名序列化检索结果。"""

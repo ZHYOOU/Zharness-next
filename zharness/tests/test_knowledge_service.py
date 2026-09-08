@@ -62,6 +62,9 @@ class FakeRepository:
     async def mark_failed(self, thread_id, document_id, error):
         raise AssertionError(error)
 
+    async def list_bindings(self, thread_id):
+        return ["base-a"]
+
 
 class FakeVectorStore:
     def __init__(self) -> None:
@@ -71,6 +74,36 @@ class FakeVectorStore:
     async def aadd_documents(self, documents, *, ids):
         self.documents.extend(documents)
         self.ids.extend(ids)
+
+
+class FakeRetriever:
+    def __init__(self) -> None:
+        self.calls: list[tuple] = []
+
+    async def search(self, thread_id, query, *, limit=None, scope_ids=None):
+        self.calls.append((thread_id, query, limit, scope_ids))
+        return {"count": 0, "results": []}
+
+
+@pytest.mark.asyncio
+async def test_search_includes_bound_knowledge_base_scopes() -> None:
+    repository = FakeRepository()
+    retriever = FakeRetriever()
+    service = KnowledgeService(repository, KnowledgeSettings())  # type: ignore[arg-type]
+    service._repository_ready = True
+    service._ready = True
+    service._retriever = retriever  # type: ignore[assignment]
+
+    await service.search("thread-a", "reference", limit=3)
+
+    assert retriever.calls == [
+        (
+            "thread-a",
+            "reference",
+            3,
+            ["thread-a", "knowledge-base:base-a"],
+        )
+    ]
 
 
 @pytest.mark.asyncio

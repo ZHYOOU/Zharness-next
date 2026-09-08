@@ -17,7 +17,9 @@ from zharness.sandbox.manager import (
     SandboxUnavailableError,
     get_sandbox_manager,
 )
+from zharness.server.knowledge import routes as knowledge_routes
 from zharness.server.memory import routes as memory_routes
+from zharness.server.skills import routes as skill_routes
 
 logger = logging.getLogger(__name__)
 
@@ -117,5 +119,8 @@ async def lifespan(_: Starlette) -> AsyncIterator[None]:
         await close_knowledge_service()
 
 
-app = Starlette(lifespan=lifespan, routes=memory_routes)
+app = Starlette(
+    lifespan=lifespan,
+    routes=[*memory_routes, *knowledge_routes, *skill_routes],
+)
 app.add_middleware(ThreadSandboxCleanupMiddleware)

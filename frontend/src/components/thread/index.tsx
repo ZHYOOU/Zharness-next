@@ -39,6 +39,7 @@ import {
 } from "../ui/tooltip";
 import { useFileUpload } from "@/hooks/use-file-upload";
 import { ContentBlocksPreview } from "./ContentBlocksPreview";
+import { KnowledgeBindings } from "./knowledge-bindings";
 import {
   useArtifactOpen,
   ArtifactContent,
@@ -367,6 +368,10 @@ export function Thread() {
               </div>
 
               <div className="flex items-center gap-4">
+                <KnowledgeBindings
+                  key={threadId}
+                  threadId={threadId}
+                />
                 <div className="flex items-center">
                   <OpenGitHubRepo />
                 </div>
