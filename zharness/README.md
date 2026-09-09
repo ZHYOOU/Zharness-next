@@ -90,12 +90,18 @@ The agent also enables:
 
 - `TodoListMiddleware` for tracking multi-step tasks.
 - `DynamicDateMiddleware`, which injects a hidden current-date reminder.
+- `DanglingToolCallMiddleware`, which completes interrupted tool-call batches
+  with synthetic error results before the history is sent to the model again.
 - `SummarizationMiddleware`, which uses model-specific context parameters. For
   `mimo-v2.5`, it summarizes at 786,432 tokens and retains the 32 most recent
   messages.
 - `TitleMiddleware`, which writes a thread `title` into the state after the
   first complete exchange. By default it derives the title from the first user
   message locally; set `title.model_name` to use a dedicated model instead.
+- `TerminalResponseMiddleware`, which retries empty terminal model responses
+  twice and returns a visible fallback if no usable response is produced.
+- `LLMErrorHandlingMiddleware`, which retries model exceptions twice with
+  bounded backoff, logs internal details, and returns a sanitized final error.
 - `MemoryMiddleware` when `memory.enabled`, which queues detached background
   extraction and exposes the `memory_*` tools (see Long-Term Memory).
 - `SubAgentMiddleware`, which registers the `task` delegation tool and runs

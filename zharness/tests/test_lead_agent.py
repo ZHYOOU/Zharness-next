@@ -31,6 +31,7 @@ def test_create_lead_agent(tmp_path, monkeypatch) -> None:
     assert agent.name == "lead_agent"
     assert agent.context_schema is None
     assert "DynamicDateMiddleware.before_agent" in agent.nodes
+    assert "DanglingToolCallMiddleware.before_model" in agent.nodes
     assert "SummarizationMiddleware.before_model" in agent.nodes
     assert "HumanInTheLoopMiddleware.after_model" in agent.nodes
     assert "TokenUsageMiddleware.after_model" in agent.nodes

@@ -35,10 +35,16 @@ from langchain_core.tools import StructuredTool
 from langgraph.types import Command
 from pydantic import BaseModel, Field
 
+from zharness.middleware.agent_recovery import (
+    DanglingToolCallMiddleware,
+    LLMErrorHandlingMiddleware,
+    TerminalResponseMiddleware,
+)
 from zharness.middleware.token_usage import (
     SUBAGENT_TOKEN_USAGE_KEY,
     accumulate_token_usage,
 )
+from zharness.middleware.tool_result import ToolResultTruncationMiddleware
 
 DEFAULT_SUBAGENT_PROMPT = """Complete the delegated objective autonomously using the tools available to you.
 
@@ -251,6 +257,14 @@ def create_sub_agent(spec: SubAgent) -> Runnable:
     if "tools" not in spec:
         raise ValueError(f"Subagent {spec['name']!r} must specify 'tools'")
     middleware = list(spec.get("middleware", []))
+    if not any(isinstance(item, DanglingToolCallMiddleware) for item in middleware):
+        middleware.insert(0, DanglingToolCallMiddleware())
+    recovery_middleware = (TerminalResponseMiddleware, LLMErrorHandlingMiddleware)
+    for middleware_type in recovery_middleware:
+        if not any(isinstance(item, middleware_type) for item in middleware):
+            middleware.append(middleware_type())
+    if not any(isinstance(item, ToolResultTruncationMiddleware) for item in middleware):
+        middleware.append(ToolResultTruncationMiddleware())
     if interrupt_on := spec.get("interrupt_on"):
         middleware.append(HumanInTheLoopMiddleware(interrupt_on=interrupt_on))
     return create_agent(

@@ -89,10 +89,16 @@ Agent 同时启用了：
 
 - `TodoListMiddleware`：为多步骤任务维护 Todo 状态。
 - `DynamicDateMiddleware`：注入隐藏的当前日期提醒。
+- `DanglingToolCallMiddleware`：在将历史再次发送给模型前，为被中断的工具
+  调用批次补齐合成错误结果。
 - `SummarizationMiddleware`：根据模型上下文参数生成摘要；`mimo-v2.5` 在达到
   786,432 tokens 时触发，并保留最近 32 条消息。
 - `TitleMiddleware`：在首轮完整交互后将线程 `title` 写入状态。默认由首条用户
   消息在本地派生标题；设置 `title.model_name` 可使用专用模型生成。
+- `TerminalResponseMiddleware`：对空的模型终态响应重试 2 次；仍无可用响应时
+  返回可见的兜底信息。
+- `LLMErrorHandlingMiddleware`：以有界退避重试模型异常 2 次，记录内部详情，
+  并在耗尽重试后返回脱敏错误。
 - `MemoryMiddleware`（`memory.enabled` 时启用）：排队执行独立的后台抽取，并提供
   `memory_*` 工具（见“长期记忆”）。
 - `SubAgentMiddleware`：注册 `task` 委托工具并运行声明式子 Agent。

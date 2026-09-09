@@ -1,5 +1,10 @@
 """Reusable ZHarness agent middleware. / 可复用的 ZHarness 智能体中间件。"""
 
+from zharness.middleware.agent_recovery import (
+    DanglingToolCallMiddleware,
+    LLMErrorHandlingMiddleware,
+    TerminalResponseMiddleware,
+)
 from zharness.middleware.dynamic_date import DynamicDateMiddleware
 from zharness.middleware.subagents import (
     DEFAULT_MAX_CONCURRENT_SUBAGENTS,
@@ -20,6 +25,7 @@ from zharness.middleware.token_usage import (
     accumulate_token_usage,
     normalize_token_usage,
 )
+from zharness.middleware.tool_result import ToolResultTruncationMiddleware
 
 __all__ = [
     "DEFAULT_MAX_CONCURRENT_SUBAGENTS",
@@ -28,13 +34,17 @@ __all__ = [
     "SUBAGENT_TOKEN_USAGE_ATTRIBUTED_KEY",
     "SUBAGENT_TOKEN_USAGE_KEY",
     "CompiledSubAgent",
+    "DanglingToolCallMiddleware",
     "DynamicDateMiddleware",
+    "LLMErrorHandlingMiddleware",
     "SubAgent",
     "SubAgentMiddleware",
     "SubAgentSpec",
     "TaskToolSchema",
+    "TerminalResponseMiddleware",
     "TitleMiddleware",
     "TokenUsageMiddleware",
+    "ToolResultTruncationMiddleware",
     "accumulate_token_usage",
     "create_sub_agent",
     "normalize_token_usage",

@@ -23,11 +23,15 @@ from zharness.knowledge.tools import (
 from zharness.memory import MemoryMiddleware
 from zharness.middleware import (
     GENERAL_PURPOSE_SUBAGENT,
+    DanglingToolCallMiddleware,
     DynamicDateMiddleware,
+    LLMErrorHandlingMiddleware,
     SubAgentMiddleware,
     SubAgentSpec,
+    TerminalResponseMiddleware,
     TitleMiddleware,
     TokenUsageMiddleware,
+    ToolResultTruncationMiddleware,
 )
 from zharness.models.factory import create_chat_model
 from zharness.skills import (
@@ -368,6 +372,7 @@ def create_lead_agent(
 
     middleware = [
         DynamicDateMiddleware(timezone),
+        DanglingToolCallMiddleware(),
         TodoListMiddleware(),
         SummarizationMiddleware(
             model=model,
@@ -375,6 +380,9 @@ def create_lead_agent(
             keep=("messages", summarization_keep),
         ),
         TitleMiddleware(title_settings=settings.title),
+        TerminalResponseMiddleware(),
+        LLMErrorHandlingMiddleware(),
+        ToolResultTruncationMiddleware(),
     ]
     memory_settings = get_settings().memory
     if memory_settings.enabled:
